@@ -43,7 +43,7 @@ Score ladder this produces: **null 15.9 → drift+NCC+KNN ≈ 12 → +beam/PF �
 | Currently running | nothing (LB score 12.624 received 2026-05-29; poller done). |
 | Primary approach | drift target + formation KNN (plane + row) + GBM stack (NCC dead, see §5); Phase 4 PF/beam next |
 | Target score | **≤ 9.4** (proven reachable), stretch **≤ 9.25** |
-| Currently working on | **konbu recipe SUBMITTED → LB 11.921 (was 12.624, −0.70 ft); OOF 11.885, LB−OOF=+0.036 (CV held).** Banked: kernel `rogii-konbu-inference` v1, dataset `rogii-konbu-artifacts`, models+cached feats under `models/konbu/`+`data/processed/konbu/`. Diagnosis (vs old banked): NOT the anchor (our plane-KNN ≡ konbu's) — the deleted GR/beam feats + full-density RowKNN + tighter reg + ensemble; **overturned the "signal-limited at 12.11" claim** + the Phase-4 "GR dead" verdict (GR feats worth +0.25 ft as GBM inputs). **Next lever (open, ~4.4 ft to frontier 7.5):** (a) re-audit other "dead" verdicts before new ideas; (b) better spatial anchor (kriging/GP — competitors' `rogii-*-gp` notebooks; our KNN untested above plane-KNN); (c) more feats/seeds/CatBoost in the ensemble. |
+| Currently working on | **DONE FOR THE NIGHT 2026-05-29. LB 11.921 banked + pushed to GitHub (tag `ROGII_11.921`).** konbu recipe (OOF 11.885) submitted; kernel `rogii-konbu-inference` v1, dataset `rogii-konbu-artifacts`, models+cached feats under `models/konbu/`+`data/processed/konbu/`. Re-audit of "dead" verdicts ran 2 probes: **GR overturned (+0.25 ft, now in recipe); multi-scale NCC CONFIRMED dead (+0.004, redundant w/ konbu's matching feats).** **Next session — pick the lever (~4.4 ft to frontier 7.5):** (a) **kriging/GP spatial anchor** — the only untested hypothesis big enough to explain a 4-ft gap (competitors' `rogii-*-gp` notebooks; our KNN ≡ konbu's so it's never been beaten); (b) postproc probe #2 on the konbu OOF (LOW-MED, `/tmp/konbu_oof.csv` exists); (c) more feats/seeds/CatBoost. See PICK_UP_HERE.md. |
 
 ### LB Submission History
 | Date | Approach | CV (OOF) | LB | Notes |
@@ -313,6 +313,19 @@ tracking, the 10-step winning workflow).
 
 ## Experiment Log
 _(newest first; append dated entries as work proceeds)_
+
+- 2026-05-29 — **Re-audit probe #1: multi-scale NCC as GBM features = NULL (+0.004 ft).** Tested the
+  Phase-2 "NCC dead" verdict in the production frame (9 multi-scale NCC feats — per-scale drift+score
+  hws 8/15/25, softmax blend, cross-scale std — added to the cached konbu 78-feat matrix, single GPU-LGB,
+  same shuffled GKF-5; `experiments/ncc_feature_ablation.py`). BASE 78 = 12.0960, BASE+NCC = 12.0920 →
+  **+0.0039 ft (noise)**. **The frame-error hypothesis did NOT hold here** (unlike GR's +0.25). Reason:
+  konbu's base ALREADY has the GR-vs-typewell matching features (`tw_diff_*`, `ncc_*_shift_well`, beam) —
+  multi-scale NCC is **redundant** with them (same alignment signal). So NCC the signal isn't dead
+  (~0.25 ft lives in those base features), but multi-scale NCC *specifically* adds nothing on top.
+  **Refined lesson: re-testing in the right frame can CONFIRM a "dead" verdict, not only overturn it** —
+  the discipline ("test as a GBM feature on the current best matrix") is what's required, but the answer
+  is sometimes still dead. Remaining re-audit candidates (lower expected value now): postproc on the konbu
+  OOF (probe #2, MEDIUM — base-model-dependent), normalized-DTW-as-feature (LOW), seq-model blend (LOW).
 
 - 2026-05-29 — **Phase-4 "GR conclusively dead" verdict OVERTURNED (quantified).** Ablation on konbu's
   cached 78-feat matrix (`/tmp/phase4_reexam.py`, single GPU-LGB, same shuffled GKF-5): ALL-78 OOF

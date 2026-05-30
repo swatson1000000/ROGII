@@ -1,109 +1,70 @@
 # PICK UP HERE
-_Last updated: 2026-05-28 ~22:45 (FIRST LB submission made — score PENDING; code-comp pipeline built; Phase 4 & postproc both dead; LB top moved to 7.5)_
+_Last updated: 2026-05-29 ~21:30 — **LB 11.921 banked + pushed to GitHub (tag `ROGII_11.921`)**. konbu
+recipe productionized & submitted (OOF 11.885). GPU LightGBM built. Two "dead" verdicts re-audited
+(GR overturned, NCC confirmed dead). Backups fixed (side-quest). All clean; nothing running._
 
-## ⏯️ RESUME HERE FIRST — (1) get the LB score, (2) then pick the lever
-**FIRST: read our first-ever LB score.**
-```
-source ~/miniconda3/etc/profile.d/conda.sh && conda activate kaggle-arch
-kaggle competitions submissions -c rogii-wellbore-geology-prediction | head -4
-```
-A background poller was running (`log/` / task `b78jaf32m`) and may have logged it already. Submission
-was made 2026-05-28 ~02:41 UTC from kernel **`stevewatson999/rogii-inference` v4** (our Phase-3 OOF
-**12.76** model). **Record the score in `plan.md` LB Submission History + §1 table**, then decide.
+## ⏯️ RESUME HERE — pick the next lever (the big question)
+We went **12.624 → 11.921** (−0.70 ft) today by reproducing+banking konbu's recipe. Frontier is **≈7.5**,
+so we're **~4.4 ft back**. Today proved part of our gap was self-inflicted (we'd thrown away the GR
+features and wrongly declared a 12.1 ceiling). But the re-audit yields are now small scraps (~0.25 ft
+GR, already banked; NCC was a null). **The ~4.4 ft frontier gap is still unexplained.**
 
-**State of play (all settled this session):**
-- **Phase 3 banked: OOF 12.7608.** Formation-KNN family ceiling (signal-limited, not capacity-limited).
-- **Phase 4 (GR-matching: NCC/beam/PF/DTW) CONCLUSIVELY DEAD** — 3 probes. GR signal is real (oracle
-  corr +0.72 at the true TVT) but **aliases**: fingerprint autocorrelation ~4 ft ≪ our anchor error
-  ~12.7 ft, so any blind search locks the wrong fringe. **Do not build PF/beam/DTW.**
-- **Phase 6 postproc DEAD too** — shrinkage/PS-fade/Sav-Golay on `oof_phase3` gave **+0.0025 ft**
-  (honest nested CV); shrinkage optimum is α=1 (the GBM OOF is already calibrated).
-- **The public LB top moved 9.25 → 7.5** since the plan's research (Deotte 8.6). Our 12.76 is far back.
-  Two hypothesized levers (GR-matching, postproc) are both ~0, so the live frontier lever looks like a
-  **much tighter spatial anchor** (we never pushed past konbu's ~12.1). A tighter anchor would *also*
-  unlock GR refinement (the aliasing is anchor-quality-dependent).
+**Decision to make first thing:**
+- **(A) Test a kriging / Gaussian-Process spatial anchor.** This is the ONE hypothesis big enough to
+  explain a 4-ft gap and the only thing we've literally never tried. Our `FormationPlaneKNN` is
+  line-for-line identical to konbu's, so the anchor has never been pushed past plane-KNN. Competitors
+  publish `rogii-*-gp` notebooks (e.g. `innerf1re/rogii-ultranote-v6-gp-main`, pulled to
+  `/tmp/pull_innerf1re_rogii-ultranote-v6-gp-main/`) — GP is plausibly the lever the 7.5 leaders pull.
+  **Recommended.** Cheapest test: GP-impute ANCC at eval (X,Y) vs the plane-KNN, compare per-formation
+  imputation RMSE + ΔOOF on the cached konbu matrix.
+- **(B) Finish the re-audit (lower EV):** postproc probe #2 on the **konbu** OOF (we only ever tested
+  postproc on the inferior 12.76 OOF; konbu's own pipeline used Optuna shrinkage + PS-fade + Sav-Golay).
+  Artifacts ready: `/tmp/konbu_oof.csv` (275 MB, the 11.87 OOF). Then normalized-DTW-as-feature / seq
+  blend (both LOW).
+- **(C) Cheap ensemble gains:** more LGB seeds + CatBoost (not installed — `pip install catboost`),
+  more features, on the cached `data/processed/konbu/train_feats.parquet` (no rebuild needed).
 
-**Decision after the score lands** (depends on the CV↔LB gap):
-- If **LB ≈ OOF (~12–13)**: we're genuinely ~5 ft back → invest in a much better spatial anchor
-  (kriging/GP instead of IDW-plane, more formations, better `b_well`) and/or **scout the 7.5 frontier**
-  (recent public notebooks — the plan's research is 2 weeks stale).
-- If **LB ≪ OOF**: distribution gap is favorable → richer formation-KNN (→ konbu 12.1) + LGB×seeds +
-  CatBoost ensemble + hill-climb may already be competitive; build that, resubmit.
+The honest read (from §`Currently working on` in plan.md): re-auditing nets ~0.25-ft scraps; a better
+anchor is the only candidate matching a 4-ft gap. **Lean (A).**
 
-## ✅ Done so far
-- **Phase 0 (2026-05-27).** `src/harness.py`: GroupKFold-by-well, simulate-test-on-train,
-  null baseline = **15.9099 ft**. `python -m src.harness` reproduces it + confirms 14,151 test ids.
-- **Phase 1 (2026-05-27).** Base pipeline: `src/features.py` 44 drift features; `src/train.py`
-  LightGBM on drift, GKF-5; `src/predict.py` → submission. Phase-1 OOF = **14.98 ft**.
-- **Phase 3 (2026-05-28) — PRODUCTIONIZED.** OOF **12.76 ft** (−2.19 vs Phase 1).
-  - **`src/spatial.py`** (NEW): `FormationPlaneKNN` (distance-weighted 2-D plane through K=10 nearest
-    **well centroids** per formation top, raw coords, LOO self-exclusion) + `RowKNN` (dense row-level
-    ANCC, K=20 IDW, stride-3 ref ≈1.68M pts, LOO over-query buffer). Both built once from train wells.
-  - **`src/features.py`** (refactored): two cached layers merged on `id` in `build_feature_matrix` —
-    `build_base_features` → `features_base_{split}.parquet` (44 cols) and `build_spatial_features` →
-    `spatial_{split}.parquet` (23 cols). **Train = LOO** (`self_wid=wid`); **test = full train-ref**
-    (`self_wid=None`, mirrors how the hidden test is scored). `rk_tvt_formula` (`−Z+ANCC+b_well`,
-    dense) is the #1 feature by gain by 4.5×.
-  - **`src/train.py` + `src/predict.py`**: heavy config (160lv / lr .03 / 4000-ES200), `phase3`-tagged
-    artifacts (`lgb_phase3_fold*.txt`, `oof_phase3.parquet`, `submission_phase3.csv`).
-  - Matrix verified end-to-end: **67 feats, 0 rows missing spatial** on train (3.78M) + test (14,151).
+## ✅ Done this session (2026-05-29)
+- **LB 11.921** (public), OOF 11.885, gap +0.036 → CV trustworthy. Prior 12.624. Recorded in
+  `plan.md` §1 + LB Submission History + Experiment Log.
+- **Diagnosed the konbu gap** (pulled his actual notebook): our anchor ≡ his; deficit = deleted GR/beam
+  feats + full-density RowKNN (5.05M vs our stride-3 1.68M) + tighter reg (89lv+heavy L2) + LGB×3+XGB
+  Ridge stack. **Overturned the banked "signal-limited at 12.11" conclusion.**
+- **Productionized:** `experiments/konbu_prod.py` (parallel feature build → `data/processed/konbu/`,
+  GPU-LGB×3 + GPU-XGB, saves 20 models → `models/konbu/`). Inference kernel
+  `jupyter_konbu/rogii_konbu_inference.py` (validated locally to 7.6e-6 ft, ran COMPLETE on Kaggle).
+- **GPU LightGBM built** on the GB10 (CUDA/sm_121 from source; 6.73× faster, identical RMSE). xgboost
+  now installed in `kaggle-arch` (GPU works). Recipe in memory `lgb-cuda-build-skynet`.
+- **Re-audit of "dead" verdicts** (`experiments/phase4_reexam.py`, `experiments/ncc_feature_ablation.py`):
+  Phase-4 GR "dead" → **+0.25 ft** (overturned, in recipe); multi-scale NCC "dead" → **+0.004 ft**
+  (confirmed dead — redundant with konbu's matching feats). Lesson: re-test in the GBM-feature frame;
+  it can confirm *or* overturn.
+- **Pushed to GitHub** `swatson1000000/ROGII`, commit `052c296`, tag `ROGII_11.921` (40 files; data +
+  model weights gitignored).
+- **Backups fixed** (unrelated): nightly was silently failing 5 days (orphaned UID-1001 ownership on
+  deepthought `/mnt/mypassport/backup_*_skynet` — reclaimed via chown). `~/bin/backup` hardened
+  (`send_email` retry + 465 fallback + `last_email_fail` sentinel). ⚠️ The 6 AM email failure root cause
+  is unproven (works interactively); tomorrow's 6 AM run is the real test — check `~/.msmtp.log` +
+  the sentinel file.
 
-## ▶️ Next steps (start here)
-1. ✅ **Phase 3 banked** (OOF 12.7608), **Phase 4 ABANDONED** (GR aliases → ~0), **Phase 6 postproc
-   DEAD** (+0.0025 ft). **First LB submission MADE — score pending** (see RESUME HERE FIRST).
-2. **Read the LB score, record it, pick the lever** per the decision tree in RESUME HERE FIRST.
-3. **Most likely real lever: a much tighter spatial anchor.** Current KNN ~12.1–12.76; LB frontier 7.5.
-   Ideas: kriging / Gaussian-process on the 6 formation tops instead of IDW-plane; richer `b_well`
-   (early/mid/late/WLS variants — see 9.251 `seg_b_well` in `/tmp/nihilisticneuralnet_*.code.py`);
-   dense-ANCC std/dist/bias features. A tighter anchor lowers RMSE directly AND could unlock GR refine.
-4. **Scout the 7.5 frontier** — the plan's research (9.25 top) is 2 weeks stale. Pull current public
-   notebooks (`kaggle kernels list --competition rogii-wellbore-geology-prediction --sort-by scoreDescending`)
-   to find the missing lever (better spatial method? leak? external data? typewell used differently?).
-5. **Ensemble** (after a better anchor): LGB×3-seeds + CatBoost (⚠️ **xgboost/catboost NOT installed
-   locally** — `pip install` in `kaggle-arch`, or run on deepthought), GKF-5, hill-climb/NNLS blend.
+## 📁 Key artifacts (for the next lever)
+- Cached konbu feature matrices: `data/processed/konbu/{train_feats,test_feats}.parquet` (78 feats +
+  id/well/target). **Use these for any ablation — no 35-min rebuild needed.**
+- konbu OOF (for postproc probe): `/tmp/konbu_oof.csv`.
+- Models: `models/konbu/` (3 LGB seeds ×5 folds + XGB ×5 folds + `blend.json` + `feature_cols.json`).
+- Recipe provenance in repo: `docs/konbu_recipe/{blend,feature_cols}.json`.
+- GPU LGB: `device_type="cuda"` works in `kaggle-arch`; **fresh `lgb.Dataset` per device** (reusing one
+  across cpu→cuda segfaults — see memory `lgb-cuda-build-skynet`).
 
-## 🚀 Kaggle submission pipeline (BUILT — code competition; reuse for every resubmit)
-- **It IS a code competition** — CSV upload via CLI is rejected (HTTP 400). You submit by pushing a
-  notebook that writes `/kaggle/working/submission.csv`, then **Submit to Competition on the web** (the
-  final submit is web-only; CLI can't do it).
-- Artifacts dataset (private): **`stevewatson999/rogii-artifacts`** = `src/` (zipped) + 5 gz fold models.
-  Rebuild from `kaggle_artifacts/` then `kaggle datasets version -p kaggle_artifacts -m "..."`.
-- Kernel: **`jupyter/rogii_inference.py`** + `jupyter/kernel-metadata.json`. Reuses `src/` via shims
-  (`C.RAW`→comp input, `C.MODELS`→decompressed models, `C.PROC`→working) and **self-locates** inputs.
-  Resubmit: `kaggle kernels push -p jupyter/` → wait for COMPLETE (`kaggle kernels status ...`) → submit on web.
-- **Mount gotchas (cost 4 kernel versions):** CLI-attached sources mount **NESTED** at
-  `/kaggle/input/competitions/<slug>/` and `/kaggle/input/datasets/<user>/<slug>/` (NOT flat — the kernel
-  recurses to find them); Kaggle **auto-extracts** uploads (`src.zip`→`src/src/...`, `*.gz`→`*.txt`);
-  brand-new private datasets take a few min to propagate before they attach.
-- Validate locally before pushing: `/tmp/test_kernel.py` mirrors the kernel against Kaggle's layout.
-
-## ⚠️ Productionization gotchas (preserved in src/spatial.py — don't regress)
-- **RowKNN LOO buffer:** a well's own rows are its nearest neighbors, so the KD-tree query over-fetches
-  `max(400, maxself + k + 5)` (maxself ≈ 4047 at stride-3) before masking self, else you leak / run
-  short of neighbors.
-- **Plane fit is in RAW (X,Y) through well CENTROIDS** — never dense per-row points (collinear along
-  one trajectory → intercept extrapolates to garbage, saw 2107 ft).
-- **Test uses the full train reference (no self-exclusion).** For the 3 visible test wells (blanked
-  train wells) this is a mild optimism, consistent with predict.py's already-flagged optimistic sanity
-  check; for the real hidden test there is no leak.
-- **Cache layout:** `features_base_{split}.parquet` (base 44) + `spatial_{split}.parquet` (spatial 23).
-  `build_feature_matrix` merges them on `id` each call (cheap; not re-cached). Delete a layer to force
-  its rebuild. `spatial_train.parquet` was seeded by copying the validated `phase3_feats_s3.parquet`.
-
-## ⚠️ Compute / environment gotchas
-- **Conda env (skynet, aarch64): `kaggle-arch`** (`source ~/miniconda3/etc/profile.d/conda.sh &&
-  conda activate kaggle-arch`). base/`kaggle` CLI is broken. **xgboost not installed** locally.
-- **Neither skynet nor deepthought has a GPU-enabled LightGBM build** (both CPU-only). For this GBM
-  workload skynet CPU is the right lane. ROGII path does NOT exist on deepthought (rsync to dispatch).
-- Run scripts with `nohup` + timestamped `log/`. Never `conda run` (buffers logs).
-
-## Verification items (plan §10)
-- ✅ **Code competition** (not CSV upload) — confirmed (CLI 400; pipeline built, see above).
-- ✅ **Metric scale** — LB scores are RMSE-scale (top 7.5, null ~15.9); MSE label ranks identically.
-- ⬜ **Exact daily submission quota** — likely 5/day (typical); confirm on the competition Submissions tab.
-- ⬜ **Scoring-kernel runtime cap** — our kernel does 3 wells in ~3–4 min; ~200 hidden wells should fit
-  a typical ≤9h cap (an over-run would *error*, not silently fail). Confirm if a future kernel gets heavy.
-- ℹ️ Deadline **2026-08-05 23:59 UTC**.
+## ⚠️ Settled this session — don't re-litigate
+- konbu recipe = current best (OOF 11.885 / LB 11.921). Anchor is plane-KNN (≡ konbu).
+- GR-matching: dead as a *point estimator* (aliasing), but the *features* are worth +0.25 ft — KEPT.
+- Multi-scale NCC: adds ~0 on top of konbu's base (redundant). Don't re-add.
+- Genuinely dead (don't revisit): absolute-TVT target (19.5); GR/NCC/DTW as point estimators.
 
 ## Read order for a cold start
-`PICK_UP_HERE.md` (this) → `SUMMARY.md` (facts) → `plan_summary.md` (the approach) → `plan.md` (full detail).
+`PICK_UP_HERE.md` (this) → `plan.md` §1 + Experiment Log (newest first) → `SUMMARY.md` (facts) →
+`plan_summary.md` (approach). GitHub: `swatson1000000/ROGII` @ tag `ROGII_11.921`.
