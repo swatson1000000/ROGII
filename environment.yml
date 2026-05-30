@@ -1,0 +1,41 @@
+name: kaggle
+# ROGII — Wellbore Geology Prediction — pinned env.
+#
+# Sequence / log-correlation regression (predict TVT along MD via GR alignment),
+# NOT a per-row tabular problem. The stack centers on signal processing; GBM is
+# a baseline, not the headline.
+#
+# Build:
+#   conda env create -f environment.yml
+#   conda activate kaggle           # use `kaggle-arch` on skynet (aarch64)
+#
+# Python 3.11 for ML-stack stability (matches skynet's kaggle-arch env).
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+
+  # --- core data ---
+  - numpy=1.26.*
+  - pandas=2.2.*
+  - pyarrow=17.*
+
+  # --- signal alignment / sequence (the heart of the problem) ---
+  - scipy=1.13.*
+
+  # --- baseline model (one approach, not the stack) ---
+  - scikit-learn=1.5.*
+  - lightgbm=4.5.*
+  # - xgboost=2.1.*   # optional ensemble diversity; not in skynet's kaggle-arch env
+
+  # --- viz + utils ---
+  - matplotlib
+  - tqdm
+  - pyyaml
+
+  - pip:
+      - kaggle
+      # - torch        # sequence model (GRU / SSM / transformer over the well path)

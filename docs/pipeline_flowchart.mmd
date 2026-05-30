@@ -1,0 +1,39 @@
+flowchart TD
+    subgraph Data["📦 Data Sources (data/raw)"]
+        HW[horizontal_well.csv\n773 wells · MD,X,Y,Z,GR,TVT_input\n+TVT +markers in train]
+        TW[typewell.csv\nvertical reference · TVT,GR\n+Geology in train]
+        SS[sample_submission.csv\nid = well_rowindex]
+    end
+
+    subgraph Prep["⚙️ Preprocessing"]
+        PS[locate Prediction Start\nfirst NaN TVT_input]
+        FEAT[feature builder\nGR vs typewell correlation\ntrajectory dip/azimuth]
+        CV[GroupKFold by well_id\n5 folds · seed 42]
+        HW --> PS --> FEAT
+        TW --> FEAT
+        FEAT --> CV
+    end
+
+    subgraph Train["🏋️ Modeling (approach TBD — see plan.md)"]
+        M[predict dTVT anchored on TVT_input\nat/after PS]
+        CV --> M
+    end
+
+    subgraph Eval["📊 Evaluation"]
+        OOF[OOF preds → data/processed]
+        EV[evaluate.py\nRMSE/MSE of dTVT, scored rows only]
+        M --> OOF --> EV
+    end
+
+    subgraph Submit["🚀 Kaggle Submission"]
+        NB[inference notebook\nsame feature builder]
+        M --> NB
+        SS --> NB
+        NB --> SUB[submission.csv\nid, tvt]
+    end
+
+    style Data fill:#2a1a3a,stroke:#9a4abf,color:#fff
+    style Prep fill:#1a2a3a,stroke:#4a7abf,color:#fff
+    style Train fill:#1a3a5c,stroke:#4a8abf,color:#fff
+    style Eval fill:#2a2a1a,stroke:#bfbf4a,color:#fff
+    style Submit fill:#3a1a1a,stroke:#bf4a4a,color:#fff

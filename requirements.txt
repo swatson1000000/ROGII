@@ -1,0 +1,27 @@
+# ROGII — Wellbore Geology Prediction
+# Sequence / log-correlation regression: predict TVT as a continuous path along
+# MD, anchored at the Prediction Start point, by aligning the horizontal-well GR
+# log against the typewell GR-vs-TVT profile. (Not a per-row tabular problem.)
+
+# --- core data ---
+numpy>=1.24
+pandas>=2.0
+pyarrow>=14.0
+
+# --- signal alignment / sequence (the heart of the problem) ---
+scipy>=1.10          # cross-correlation, filtering, interpolation
+# fastdtw / dtaidistance  # add if dynamic time warping is used for GR alignment
+
+# --- baseline model (one approach, not the stack) ---
+scikit-learn>=1.3
+lightgbm>=4.0        # GBM on engineered sequence features = baseline only
+# xgboost>=2.0       # optional ensemble diversity; not in skynet `kaggle-arch` — pip install if needed
+
+# --- sequence model (optional: GRU / SSM / transformer over the well path) ---
+# torch>=2.0
+
+# --- utils ---
+matplotlib>=3.7
+tqdm
+pyyaml
+kaggle               # competition data + submission CLI

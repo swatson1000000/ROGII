@@ -1,0 +1,63 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.eggs/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints
+# Note: jupyter/*.ipynb is tracked for Kaggle submission
+
+# Data — keep structure, exclude the large competition files
+/data/raw/train/
+/data/raw/test/
+/data/raw/*.pptx
+/data/raw/*.zip
+/data/processed/*.csv
+/data/processed/*.pkl
+/data/processed/*.npz
+/data/external/
+
+# Model checkpoints / weights
+/models/**/*.pt
+/models/**/*.pth
+/models/**/*.onnx
+/models/**/*.txt
+/models/**/*.lgb
+/models/**/*.pkl
+
+# Logs
+/log/*.log
+*.log
+
+# Outputs
+submission.csv
+/results/
+
+# Temp
+*.tmp
+*.temp
+*.bak
+*.bak_*
+
+# --- augmented 2026-05-29 (ROGII_11.921 commit): keep data, model weights,
+# and Kaggle build staging out of git entirely. Recipe code lives in
+# jupyter_konbu/ + src/; trained weights are reproducible + in the Kaggle dataset. ---
+/data/
+/models/
+/kaggle_artifacts/

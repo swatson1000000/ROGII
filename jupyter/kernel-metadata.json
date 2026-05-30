@@ -1,0 +1,13 @@
+{
+  "id": "stevewatson999/rogii-inference",
+  "title": "rogii-inference",
+  "code_file": "rogii_inference.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["stevewatson999/rogii-artifacts"],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}

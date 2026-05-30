@@ -1,0 +1,13 @@
+{
+  "id": "stevewatson999/rogii-konbu-inference",
+  "title": "rogii-konbu-inference",
+  "code_file": "rogii_konbu_inference.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["stevewatson999/rogii-konbu-artifacts"],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
