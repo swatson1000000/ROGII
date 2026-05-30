@@ -41,6 +41,7 @@ from pathlib import Path
 
 import lightgbm as lgb
 import xgboost as xgb
+from catboost import CatBoostRegressor
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
@@ -573,7 +574,13 @@ if COMP is None or ART is None:
 print(f"[locate] COMP={COMP}  ART={ART}", flush=True)
 
 feature_cols = json.load(open(ART / "feature_cols.json"))
-blend = json.load(open(ART / "blend.json"))
+# Prefer the 5-model blend (LGBx3 + XGB + CatBoost, OOF 11.821) when present;
+# fall back to the 4-model blend (OOF 11.885) otherwise.
+blend_path = ART / "blend_catboost.json"
+if not blend_path.exists():
+    blend_path = ART / "blend.json"
+print(f"[blend] using {blend_path.name}", flush=True)
+blend = json.load(open(blend_path))
 keys = blend["keys"]
 coefs = np.asarray(blend["ridge_coef"], dtype=np.float64)
 print(f"[artifacts] {len(feature_cols)} feats; blend keys={keys} coefs={coefs.round(3)}", flush=True)
@@ -603,6 +610,12 @@ for k in keys:
         for fold in range(N_SPLITS):
             b = lgb.Booster(model_file=str(ART / f"lgb_seed{seed}_fold{fold}.txt"))
             preds += b.predict(X) / N_SPLITS
+    elif k.startswith("cat_"):
+        seed = k.split("_")[1]
+        for fold in range(N_SPLITS):
+            b = CatBoostRegressor()
+            b.load_model(str(ART / f"cat_seed{seed}_fold{fold}.cbm"))
+            preds += b.predict(Xv) / N_SPLITS
     else:  # xgb_<seed>
         seed = k.split("_")[1]
         dte = xgb.DMatrix(Xv)

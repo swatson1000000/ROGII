@@ -9,6 +9,10 @@
 identifiers, docs, commit messages, and chat responses. E.g. `color` not `colour`, `normalize`
 not `normalise`, `behavior` not `behaviour`, `center` not `centre`, `modeling` not `modelling`.
 
+**Always report times in EST/EDT (US Eastern), never UTC.** This applies to chat responses and any
+human-facing status (e.g. submission timestamps). Kaggle/CLI output is in UTC — convert it to Eastern
+before reporting. (Competition deadlines stated in UTC stay UTC; just label them.)
+
 ## ⚠️ ALWAYS Consult plan.md Before Any Action
 
 **Before suggesting or starting any experiment or code change, read `plan.md` first.**
