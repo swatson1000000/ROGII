@@ -1,6 +1,545 @@
 # PICK UP HERE
 
-_⏸️ **PAUSED 2026-05-30 PM — nothing running. Banked best = LB 11.903.**_
+_✅ **2026-06-06 — NEW BEST LB 8.269 (−1.85 ft vs 10.122, biggest jump of the project). PF-DOMINANT OUTPUT-BLEND SHIPPED & SCORED.**
+Submitted kernel `rogii-frontier-inference` v2 (frontier-222 GBM + 128-seed likelihood-weighted PF, output-blend
+w=0.44). OOF 9.17 → **LB 8.269**, LB−OOF = **−0.90 (favorable**, even more than frontier's −0.234) — the per-well,
+non-density-coupled PF transferred decisively on the hidden set. Now at the published-notebook frontier (~8.2);
+public board top 5.986. Banked best = **LB 8.269** (live: kernel v2, dataset `rogii-frontier-artifacts` unchanged).
+**NEXT (open):** (a) bracket the blend weight — a w=0.30 second submission would test transfer sensitivity (cheap,
+2 submissions/day); (b) push the PF further toward the public ~8.2→sub-7 (more seeds, 14-config beam ensemble,
+per-well selector by n_eval/z_span — the ravaghi/pilkwang architecture we only partially built); (c) bank+harden.
+See the 2026-06-06 plan Experiment-Log entry. ⚠️ Kaggle `kernels status` endpoint 500s server-side; use
+`kaggle kernels output <k> -p <dir>` as the completion probe. Nothing running._
+
+_▶️ **2026-06-06 — (DONE — see above) PF-DOMINANT OUTPUT-BLEND LEVER PASSED — PRODUCTIONIZE + SUBMIT.**
+The standalone PF gate finished (`log/pf_real_20260606_014745.log`): best 128-seed likelihood-weighted PF
+(scale 12) standalone OOF = **10.993** (naive avg 11.522, single-seed 14.37). That's above the ≤10.5 pass
+bar so the script said "PARTIAL/marginal" — but that gate asked the wrong question (standalone dominance).
+I ran the real follow-up (`experiments/pf_output_blend.py`, `log/pf_blend_*.log`): **output-blend
+(1−w)·GBM + w·PF, w*≈0.44 → OOF 9.17, gain +1.18 ft, robust out-of-fold (w 0.426–0.450, gain +1.182).**
+Verified: all 773 wells aligned (bad=0), GBM OOF reproduced to 10.3556, closed-form 2-estimator formula
+predicts 9.17 exactly (corr 0.484). **This is the 2nd-biggest lever of the project and it VINDICATES the
+public notebooks' PF-dominant architecture.** The single-seed +0.042 cheap-check was a false negative
+(single-seed PF is worse AND more correlated with the GBM's own PF feature). **Low transfer risk: PF is
+per-well, no training, NOT density-coupled** (own GR + TVT_input prefix + Z/MD + typewell only) → GP-style
+OOD collapse does not apply; deterministic by construction (`np.random.default_rng(seed)`, seeds 0..127).
+**KERNEL SURGERY DONE + LOCALLY VALIDATED (2026-06-06). Remaining = push to Kaggle + web-Submit (OUTWARD — awaiting user go-ahead).**
+- `experiments/make_frontier_kernel.py` now embeds the 128-seed scale-12 likelihood-weighted PF
+  (`run_particle_filter` + `run_pf_lik_ensemble_scales`, VERBATIM ravaghi) as a **runtime-written
+  worker module** + output-blend `final = 0.56·GBM_abs + 0.44·PF_scale12_abs` (abs space). Regenerated
+  `jupyter_frontier/rogii_frontier_inference.py` (1159 lines, compiles; worker compiles).
+- **PROCESS parallelism (loky)** over a tiny worker module → workers import only `pf_worker`, NOT the
+  kernel's heavy FI/DI build. Prototype: **4.35× over threads, bit-exact (max|d|=0 vs the 773-well pkl).**
+  End-to-end kernel run on the 3 validation wells: LokyBackend, PF 47.8s, n_pf_miss=0, blend mean 11905.61
+  + per-row values IDENTICAL to the thread-based run (and GBM path == frontier v1). Projected hidden-set
+  runtime ~12.2s/well × ~200 ≈ **~43 min** (well within limits; matches the public PF notebooks).
+- **NO new dataset artifacts needed** — PF is computed at runtime from competition CSVs; the existing
+  `rogii-frontier-artifacts` v1 (GBM fold models + blend_frontier.json + feature_cols.json) is unchanged.
+- **✅ PUSHED + RAN COMPLETE ON KAGGLE (kernel `rogii-frontier-inference` v2, 2026-06-06):** clean run,
+  worker module written, LokyBackend 4 workers, n_pf_miss=0, blend mean 11905.61, FRONTIER KERNEL DONE.
+  Kaggle output reproduces local to **mean|Δ|=2.3e-5 ft** (max 0.024; same env-float delta as frontier v1),
+  0 NaN. PF ~99s/3-wells on Kaggle → hidden ~200-well run projects ~1.5–2h, within limit. ⚠️ Kaggle's
+  `kernels status` endpoint 500s persistently (server-side) — use `kaggle kernels output <k> -p <dir>`
+  (different endpoint; downloads files only when the run is COMPLETE) as the completion probe instead.
+- **▶️ ONLY REMAINING STEP (user, web-only):** open
+  https://www.kaggle.com/code/stevewatson999/rogii-frontier-inference → Output → **Submit to Competition**,
+  then record LB in plan.md §1 + LB Submission History and compare to 10.122. Expect favorable transfer
+  (frontier was OOF→LB −0.234; PF is per-well / not density-coupled → low transfer risk). ⚠️ The 9.17 is
+  OOF over 773 train wells — the kernel can't reproduce that single number on 3 visible wells; it reproduces
+  the PF+GBM bit-exact, so the hidden-set blend IS the measured operation. The LB is the verdict.
+  **Banked best stays LB 10.122 until this scores.** Decision after LB lands: if it beats 10.122 → new best;
+  if it regresses (transfer failure) → the banked 10.122 submission still stands (do not select the blended
+  one for final), and diagnose the OOF→LB gap._
+
+_▶️ **2026-06-05 — (SUPERSEDED by the PF result above) BET 1′ (transductive use of test-well POSITIONS — the spatial channel) —
+GATE 0 RUNNING.** BET 1 (transductive hidden-zone GR) was **REFUTED at the premise level**: an Explore
+read of the productionized 222-feat build (`jupyter_frontier/rogii_frontier_inference.py`) confirmed ALL
+GR-matching families (PF-ANCC, PF-Z, beam/Viterbi, multi-scale NCC, DTW multiscale+stochastic) AND all
+GR rolling/lag/lead/envelope/energy features ALREADY consume the hidden-zone GR at each eval row — the
+matchers slide the hidden-zone GR window against the typewell; that's their whole job. Corroborated by our
+own frontier leak-check note ("Future-GR center/lead is legit — full GR trace given at inference"). **So
+pseudo-labeling adds NO new GR information channel** → would only let the GBM fit its own OOD outputs
+(echo chamber, no offsetting signal). BET 1 not built. **BET 1′ (the surviving transductive angle):** the
+build imputes test ANCC from TRAIN wells only and self-imputes each test well independently — it never
+pools the OTHER test wells. Each test well's KNOWN PREFIX gives `TVT_input + Z = ANCC + b_well` at its
+(X,Y); if the ~200 hidden wells are spatially CLUSTERED, sibling test wells' prefixes anchor the formation
+surface where no train well exists — exactly the OOD region GP collapses in. **⚠️ Crux:** EV is conditional
+on hidden-set geometry we can't observe, AND a structured residual might just be train-imputation bias more
+TRAIN anchors would also fix (not test-unique). **GATE 0 DONE (`experiments/spatial_transductive_gate0.py`,
+log `log/gate0_*.log`) — INCONCLUSIVE, measured the wrong layer.** Centroid variogram of the block-holdout
+residual `r = ANCC_true − ANCC_train_imputed`: strongly STRUCTURED (structure ratio 0.843, range ~21,000 ft
+vs train spacing 468 ft; 84% of variance shared at 1,935 ft). **But two corrections:** (1) the script's
+"range ≥ spacing → mirage" auto-verdict is a bad heuristic — ignore it (a long range makes `r` MORE
+propagatable, not less; mirage-vs-real is about unobservable hidden geometry). (2) DECISIVE: per-well
+`b_well_est = b_well_true + mean_prefix(r)` already ABSORBS the local residual, so eval-zone tvt error =
+`−(r(eval) − mean_prefix(r))` = the WITHIN-WELL DRIFT of `r`, not its absolute value. The smooth long-range
+residual Gate 0 lit up is exactly the component `b_well` already removes → **Gate 0 measured one layer too
+high; it neither passes nor kills.** The real headroom (within-well residual drift) is UNMEASURED.
+Separately, the faithful block-holdout collapse number exists only for the DEAD GP imputer (24.5→48); the
+LIVE plane/dense imputer's OOD behavior is unmeasured (gp_block_holdout's plane arm is a weak reimpl, LOO
+100 vs real 47.25) — so the "region GP collapses in gives room" pitch borrowed from the wrong imputer.
+**GATE 1 DONE (`experiments/spatial_transductive_gate1.py`, log `log/gate1_*.log`) — TRANSDUCTIVE/SIBLING
+LEVER IS DEAD; a weak non-transductive self-anchoring spinoff remains unproven.** `b_well`-adjusted eval
+tvt RMSE under block-holdout (IDW row imputer; absolute levels are imputer-quality artifacts — only the
+base/self/sib DELTAS matter): **base 149.9 / self 132.8 (−17.2) / sib 136.3 (−13.6); sibling-on-top-of-self
+= +3.6 (WORSE).** Per-block, sibling pooling is UNRELIABLE — helps dense blocks (block 3: 212→153) but hurts
+sparse ones (block 0: 73→109), net negative vs self. **This CONFIRMS the `b_well`-absorption prediction:
+siblings can only contribute de-meaned (within-well) residual, which does NOT extrapolate across wells →
+the core BET 1′ transductive claim (pool the other test wells) is refuted.** The only positive signal is
+SELF-anchoring (use a well's OWN prefix-implied ANCC to anchor its eval imputation, −17 vs base) — but
+(a) it's NON-transductive (no hidden-clustering dependence), (b) measured on a weak IDW base (150 ft) far
+from the production imputer (~47 ft) so transfer is unproven and likely much smaller, (c) self-prefix
+anchors sit near the heel/early-eval only, and (d) likely redundant with existing prefix-slope/trajectory
+features in the frontier build. **VERDICT: BET 1′ (transductive) DEAD. Self-anchoring spinoff
+ALSO DEAD — gated null.** Ran the cheap residual-extractability gate (`experiments/self_anchor_gate.py`,
+log `log/self_anchor_*.log`): reconstructed the frontier blended OOF (10.3556, exact match) and tested
+whether the self-anchor feature `self_tvt = -Z + IDW_over_own_prefix(TVT_input+Z)` predicts the stack's
+leftover residual. **corr(self_drift, target) = +0.135 (a valid weak estimator) but corr(self_drift,
+residual) = +0.003; shallow GBM on the residual gained +0.0067 ft (best_iter=1 in 4/5 folds = no signal).
+REDUNDANT with the 221 frontier feats, exactly as predicted (prefix-slope/trajectory feats already carry
+it).** **BET 1 AND BET 1′ ARE FULLY DEAD — the entire transductive thread is closed.** **BET 2 (calibrated
+GR-match POSTERIOR) ALSO GATED DEAD 2026-06-05** (`experiments/bet2_posterior_gate.py`): a motion-coupled
+forward-backward HMM marginal (the sliver the build lacks) — posterior SHAPE-only residual gain −0.0003 =
+NULL; the only +0.050 was its POINT estimate (a 6th GR-matcher at diminishing returns, optimistic), NOT the
+posterior reframe. **That is 6 dead levers (super-solution, Geology, resistivity, BET 1, BET 1′, BET 2),
+every genuinely-new part redundant / absorbed by `b_well` / below the ±16 ft resolution. RECOMMENDATION:
+stop hunting levers — strong, repeated evidence the ~3-ft gap to sub-7 is NOT reachable from
+GR+trajectory+train-only-surfaces (no public source explains sub-7; the channel the leaders likely use was
+never shipped). The honest move is to BANK + HARDEN LB 10.122: run Bet 3 (hardened anti-overfit / blind-test
+CV discipline, the FORCE-2020 lesson) and protect the final private-LB submission from a GP-style
+false-positive.** Bet 4 (SSL/foundation GR encoder) remains shelved (needs external corpus / multi-channel
+input we lack). Banked best stays LB 10.122. Nothing running._
+
+_▶️ **2026-06-06 — NEW DIRECTION (reverses the "data tapped" lean above): SEED-ENSEMBLED PF as a DOMINANT
+OUTPUT-LEVEL PREDICTOR.** Pulled + analyzed the new public frontier (board top → **5.986**; public notebooks
+~8.2). Three independent strong notebooks — `debatreyabiswas` (8.188), `ravaghi` (118 votes), `pilkwang` (133
+votes) — CONVERGE on one architecture: `final = 0.3·(GBM stack ≈ our frontier-222) + 0.7·(PF/beam pipeline)`.
+The PF pipeline = a **100–150-seed, likelihood-temperature-weighted** particle filter (softmax-weight seeds by
+accumulated GR loglik, scales {3,5,8,12}) + 14-config beam, routed by a per-well selector (bin by
+`n_eval`/`z_span`). **KEY DIFF: we feed a few-seed PF into the GBM as 1 of 222 feats; they ensemble PF over
+150 seeds and trust it at 0.7 of the OUTPUT.** **The 3-well leak is NOT the source:** `test/` = 3 wells, all
+blanked-train, all 3 notebooks exploit `tvt_from_contacts` — but top public 5.986 ≠ ~0 ⟹ public LB is scored
+on HIDDEN wells, not the 3 leakable ones ⟹ sub-9 = HONEST method, not leak (verified: te⊆tr, 3 test wells).
+**Tension w/ our "GR point-estimate aliased/dead":** resolved as a false negative from an UNDER-ENSEMBLED PF
+(same trap as PF/DTW/NCC solo → +1.4 ft jointly); matches our own shelved "average seeded PF realizations"
+idea. **NEXT = reproduce-wholesale (2-for-2 playbook): build the 150-seed likelihood-weighted PF + beam as a
+standalone TVT estimator, blend at OUTPUT level with frontier-222, GATE combined OOF vs 10.356
+(block-holdout-aware), submit.** ⚠️ Re-fit the 0.3/0.7 weight + selector thresholds on OUR OOF (likely
+public-tuned); IGNORE the `tvt_from_contacts` leak (won't transfer, corrupts local val); re-apply
+crc32-per-well numba seeding. Portable secondary gates: pilkwang prefix GR self-correlation (`selfcorr_*`) +
+`md_since` exp-decay postproc + segmented `b_well`. Sources in `/tmp/rogii_new/`. Banked best stays LB 10.122.
+
+▶️ **DE-ALIASING CHEAP-CHECK DONE (2026-06-06) — EV LOWERED, lever narrowed to one untested mechanism.**
+HMM-proxy runs (`pf_dealias_check.py/_2.py`) FAILED as proxy artifacts (marginal-mean blew up to 11083 ft;
+Viterbi-MAP had a systematic 75 ft bias from scale-mismatched absolute-GR emission — my toy lacked the
+amplitude-invariant likelihood real matchers use; discard them). The VALID check uses the REAL cached
+matcher columns: **single-seed `pf_ancc_delta` standalone RMSE = 14.37** (null 15.91, frontier GBM 10.36) →
+weak/aliased even with the correct likelihood (confirms our "GR point-est aliased" prior, NOT just a broken
+HMM). **Best OUTPUT-blend weight of PF with frontier OOF = 0.08 (+0.042 ft), NOT 0.7.** 2-seed avg
+14.37→13.66 = SHALLOW ensembling gain → the dominant error is ALIASING (systematic across seeds), which
+seed-AVERAGING cannot remove; 14→8 by averaging is structurally implausible. **So the 0.7-weight premise is
+NOT supported by our data.** The ONE untested mechanism that could still rescue it: likelihood-WEIGHTED
+multi-scale seed SELECTION (scales {3,5,8,12}, re-weight seeds by accumulated GR loglik — selects right-alias
+seeds, unlike averaging). **NARROWED NEXT STEP: build ONLY the real likelihood-weighted multi-scale PF,
+measure its STANDALONE OOF FIRST — if ≤~10 (competitive w/ GBM) the lever is real → output-blend + gate; if
+~13-14 (like single-seed) de-aliasing didn't deliver → the notebooks' 0.7 is their-weaker-GBM/public-tuned
+→ DROP.** Free tiny bankable noted: output-blending `pf_ancc` at w≈0.08 gives +0.04 OOF (fold into final
+blend, not a lever). Banked best stays LB 10.122._
+
+▶️ **RESUME HERE (2026-06-06, overnight) — REAL PF STANDALONE-OOF GATE IS RUNNING (`experiments/pf_real_gate.py`).**
+This is the decisive test of the PF-dominant-blend lever. It runs the REAL 128-seed likelihood-weighted
+multi-scale PF (code copied verbatim from `/tmp/rogii_new/ravaghi_.../*.py` `run_particle_filter` +
+`run_pf_lik_ensemble_scales`, scales {3,5,8,12}) over all 773 train wells and scores the standalone OOF
+(RMSE of PF TVT vs true TVT on eval rows). **~57 min runtime.** ⚠️ First run COMPLETED the 57-min compute
+but crashed on an aggregation bug (unsaved → lost); the re-run now **`joblib.dump`s raw results to
+`models/frontier/pf_real_results.pkl` the instant compute finishes** (before aggregation), so if it crashes
+again, RE-AGGREGATE FROM THE PKL — do NOT re-run the 57-min PF. Verdict in `log/pf_real_*.log`.
+**WHEN IT FINISHES — apply the gate (per the cheap-check decision):**
+- best likelihood-weighted scale standalone OOF **≤ ~10.5** → de-aliasing via likelihood-selection is REAL
+  (our "GR point-est aliased" was an under-ensembling false negative) → **BUILD the output-blend**: re-fit
+  the PF weight on OUR OOF (NOT their 0.7), gate combined vs frontier 10.356, then productionize→submit.
+- **~13–14** (≈ single-seed 14.37) → selection didn't beat averaging → the notebooks' 0.7 = their-weaker-GBM
+  / public-tuning, NOT transferable → **DROP the lever, pivot to hardening 10.122** (Bet 3).
+- The log also prints `pf_mean` (naive 128-avg) vs the weighted scales → isolates whether WEIGHTING
+  (alias selection) beats AVERAGING (variance reduction).
+⚠️ For productionization (only if PASS): IGNORE `tvt_from_contacts` (3-well leak); re-fit blend weight +
+selector thresholds on OUR OOF; re-apply crc32-per-well numba seeding ([[reproduce-wholesale-beats-additive-tests]]).
+Banked best stays LB 10.122. Nothing pushed._
+
+_❌ **2026-06-04 (latest) — TYPEWELL-GEOLOGY LAYER LEVER = DEAD AT ORACLE (do not build).** Probed the
+unused typewell `Geology` layer labels before building (`experiments/geology_oracle_probe.py`, 773 wells):
+layer bands are **median 115 ft** vs ±16 ft signal (7× too coarse); oracle band-center RMSE 22.5 (worse
+than null 15.9); clamp-to-true-band 14.97 (≈null); and the **last_known-implied layer == true layer 95.7%
+of eval rows** → fully redundant with `last_known_TVT`. A lateral stays in ONE layer, so the label is
+~constant and the hard signal is the fine position WITHIN the layer. Not buildable into a win. **Three
+dead ends in a row: (a) super CatBoost×3 failed the gate; (b) resistivity not in the data; (c) Geology
+redundant. No remaining identified lever to the 6.7 leaders; banked best stays LB 10.122. Nothing running —
+awaiting a fresh direction.** ↓ details below ↓_
+
+_❌ **2026-06-04 (later) — OPTION (a) DONE = FAILED THE GATE (marginal); OPTION (b) PREMISE IS FALSE.**
+Trained CatBoost seeds 7 & 123 on the super build (`experiments/super_train_cat_extra.py`, deepthought
+GPU; cat_7 OOF 10.483, cat_123 OOF 10.400) and re-blended 6 models (`experiments/super_blend6.py` →
+`models/super/blend6_summary.json`). **CatBoost diversity recovered 0.081 of the 0.096 deficit** (4-model
+raw 10.452 → 6-model raw **10.371**), weights confirm the frontier pattern (cat_123 0.475 / cat_7 0.214 /
+cat_42 0.10). But raw 10.371 is **+0.015 vs frontier gate 10.356 → still FAILS** (with optimistic
+full-OOF-tuned SG it dips to 10.343, but the gate is raw-vs-raw). **The CatBoost×3 diversity gap is now
+RULED OUT; super is a confirmed sidegrade-down, not a superset. Banked best stays LB 10.122.**
+**OPTION (b) IS NOT BUILDABLE FROM THE DATA:** test wells expose ONLY `MD, X, Y, Z, GR, TVT_input` —
+there is NO resistivity/azimuthal channel, and the 6 formation surfaces (ANCC + ASTNU/ASTNL/EGFDU/EGFDL/
+BUDA) are TRAIN-ONLY (absent at inference → usable only via spatial imputation, which we already do). The
+§8(b)/backlog premise ("leaders use the resistivity channel no public notebook touches") rests on data we
+were never given. **Next lever must come from GR + trajectory + train-only-surface-imputation only —
+awaiting user's call on a genuinely new direction (see below).** Nothing running._
+
+_❌ **2026-06-04 — SUPER-SOLUTION REPRODUCTION FAILED THE GATE.** Built + trained on our data (170 feats,
+LGB×3 + CatBoost cat_42, Ridge-positive blend). **Combined OOF 10.452 raw / 10.424 +postproc+SG vs the
+frontier gate bar 10.356 → ~0.07–0.10 ft WORSE.** Per the gate ("don't ship a wash") it is NOT
+productionized; nothing pushed. **Banked best stays LB 10.122 (`rogii-frontier-inference` v1).** It turned
+out to be 170 feats, NOT a superset of frontier-222 — it traded frontier's multi-scale/stochastic DTW for
+the new families and netted slightly negative. **Useful side-result: GR-matcher ablation shows GR-matching
+gain HOLDS under block-holdout (+1.05 ≥ +1.00 shuffled), fold_std tightens 1.02→0.60 → real signal, NOT
+noise-floor candy** (refutes the backlog "we over-trusted overfit GR" worry). **OPEN FORK:** (a) train
+CatBoost×3 on the super build + re-blend + re-gate (cheap; only cat_42 trained, it carries 0.60 of the
+blend — the diversity gap vs frontier's CatBoost×3 is unruled-out), or (b) pivot to the resistivity/ANCC-
+inversion lever (§BACKLOG). Nothing running. Artifacts: `data/processed/super/`, `models/super/`. ↓ details below ↓_
+
+_⚠️ **2026-06-01 PM — THE BOARD MOVED TO SUB-7.** Public LB top = **6.693 / 6.899 / 7.482** (Deotte
+8.373). Our banked best **LB 10.122** is now **~3.4 ft back**, not 2.6. The old "frontier ≈9.25" is
+stale. **NEXT = reproduce romantamrazov "SUPER SOLUTION (top-3)" WHOLESALE** — the best PUBLISHED
+notebook, and a direct **superset of our frontier-222 base** (see "▶️ NEXT — super-solution" below).
+Source cached `/tmp/rogii_top3_code.py`. Expect ~9–9.5; **the actual sub-7 leaders published nothing —
+there is no known public path below ~9.** Banked best still = `rogii-frontier-inference` v1 (LB 10.122).
+Nothing running._
+
+## ❌ (DONE 2026-06-04 — FAILED THE GATE) reproduce romantamrazov "SUPER SOLUTION (top-3)" wholesale
+**OUTCOME:** built (`experiments/super_build.py`, 170 feats) + trained LGB×3 (`super_train_lgb.py`) +
+CatBoost cat_42 (`super_train_cat.py`) + blended (`super_blend.py`). Per-model OOF lgb 10.69–10.72 /
+cat_42 10.545; Ridge-positive 4-model blend raw **10.452**, +postproc(α1.0/τ100/w_pf0.05) 10.425, +SG
+**10.424** — all WORSE than the frontier gate bar **10.356**. Gate FAILED → not productionized. See the
+2026-06-04 plan Experiment-Log entry for the full diagnosis + the open CatBoost×3 / resistivity fork. The
+original plan is kept below for provenance and for the (a) CatBoost×3 retry, which reuses all of it.
+
+**Why this (not more ablation):** our two biggest jumps (12.6→11.9 konbu, 11.9→10.1 frontier) BOTH came
+from reproducing a better public notebook end-to-end, never from add-one-feature gates. This is the
+same move: the super-solution is our exact frontier skeleton (PF/beam/NCC/plane+dense-KNN) plus ~10 new
+feature families and retuned models. Pulled it via `kaggle kernels pull romantamrazov/rogii-super-solution-lb-top-3`
+→ `/tmp/rogii_top3_code.py` (775 lines, self-contained; also `rogii_better` = its 9.956 predecessor).
+
+**What it adds over our frontier-222 build** (the delta to port into a build script):
+- **WLS b_well** (recent rows up-weighted, `decay=0.02`) → `bww_*`, `tvtFw_*_d`, `tvt_densew_d`, `tvt_d50_d`.
+- **Per-formation known-zone RMSE** `frm_rmse_{fn}` — tells the model which of the 6 surfaces to trust.
+- **Formation-consensus** `form_mean_d`/`form_std_d`/`form_rng_d` (spread across the 6 formation TVTs).
+- **Inter-signal consensus** `signal_std`/`signal_mean_d` over {PF, 7 beams, sc8/15/25, ANCC, dense} — master uncertainty.
+- **GR envelope/energy** `gr_env` (rolling max), `gr_nrg` (rolling RMS); **GR detrend residual** `gr_detr`; **prefix GR slope** `pfx_gr_slope`.
+- **4th tw_diff family** anchored at PF-ANCC: `tdpf{-30..30}` (we already have anchor/beam/sc families).
+- **Multi-scale NCC** hw=8/15/25 (`sc8/15/25_d` + `*_score`, `sc_cons_d`, `sc_trust`, `hyb_d`).
+- **Models:** LGB `num_leaves=255` (was 127), `min_child_samples=15`, `reg_lambda=3`, ×3 diverse lr
+  (0.025/0.020/0.030) @8000it early-stop; CatBoost `depth=7` lr=0.025 @8000it `border_count=254`;
+  **NO XGB**; **`Ridge(alpha=1, positive=True)`** stack (picks max(avg, ridge)).
+- **Postproc:** 3D grid `alpha∈[0.65,1.0] × tau∈{None,25,50,100,200} × w_pf∈{0,.05,.10}` (w_pf = blend
+  in raw PF-ANCC residual) + per-well **Savitzky-Golay** (`sg_w=17, sg_p=3`).
+
+**Candidate features to FOLD IN (cheap, structural, NOT GR-matching — the channel that actually transfers):**
+- **Q-3D tortuosity** (Jing et al. 2022) — cumulative path-curvature / dogleg from XYZ trajectory. mycarta's
+  geophysicist notebook measured **−0.107 RMSE** on a single LGB; code in `github.com/mycarta/rogii-geosteering-toolkit`
+  (wellbore tortuosity module). We have instantaneous `dzdmd`/`dxdmd`/`dydmd` but NO cumulative curvature
+  metric → genuinely additive. Gate it; may shrink in our richer stack but it's the best non-GR lever found.
+- **Signed-azimuth sin/cos** paired with dZ/dMD (updip vs downdip — "opposite directions see the formation
+  in opposite sequence"). Check our build first; we have dx/dy but maybe not signed-azimuth trig. Add if absent.
+- **Confirmed DEAD (skip):** well-level AEON features (Catch22 + ClaSP) → **+0.476 RMSE WORSE** under
+  GroupKFold (cross-well overfit). Matches our own extractor-in-stack failures. Don't build them.
+- Source: forum post "A geophysicist's take: domain priors + Q-3D tortuosity" (mycarta, 2026-06-01).
+
+**⚠️ CV-design contradiction to NOT adopt blindly:** mycarta rejects BlockKFold, claiming the hidden test is
+spatially interleaved (interpolation, not extrapolation) → block holdout too pessimistic. This contradicts
+our HARD LB FACT: GP went 24.50 LOO → 47.95 block-holdout → **actually regressed to LB 12.631** (memory
+[[gate-spatial-levers-with-block-holdout]]). If the test were pure interpolation, GP wouldn't have collapsed.
+mycarta is mid-pack single-LGB and can only see the PUBLIC split; the hidden wells' distribution is unknown
+to them. **Keep block-holdout gating for spatial levers; weight our LB evidence over their CV-design claim.**
+
+**Build/gate steps:**
+1. Port `/tmp/rogii_top3_code.py`'s `build_well` into an `experiments/super_build.py` (reuse our frontier
+   harness: data path → `data/raw`, NCPU=16). **⚠️ FIRST LINE of `build_well`: `np.random.seed(crc32(wid)&0xffffffff)`** —
+   its PFs use unseeded `np.random` under a threaded joblib build; without per-well seeding the train
+   feats won't reproduce at inference (cost us a 1.24 ft mismatch last time). Cache → `data/processed/super/`.
+2. Train LGB×3 (skynet GPU) + CatBoost (deepthought GPU), GKF-5 seed42, **same OOF protocol as frontier**.
+3. **GATE: combined Ridge(positive) OOF vs frontier 10.356.** If it doesn't beat it, stop and diagnose —
+   don't ship a wash. If it does, run the 3D postproc grid, then productionize → kernel → validate
+   (KAGGLE_INPUT=/tmp/kval_input, mean|Δ|→0) → `kaggle datasets version` + `kaggle kernels push` → web-submit.
+4. **Watch the OOF↔LB gap** (frontier was a favorable −0.23). These are the same konbu/PF families → low
+   transfer risk, but the LB is the verdict.
+
+⚠️ **Reality check before sinking hours:** this targets the author's **sub-9**, not sub-7. Best case it
+lands ~9–9.5 (−1 ft, real, bankable). The 6.7–7.5 leaders are unpublished — closing that last ~2 ft is
+NOT in any public notebook and is a separate research problem (likely a signal we haven't built:
+resistivity/ANCC inversion, a sequence model, or a fundamentally better geosteering posterior).
+
+---
+
+### (superseded) the old "squeeze toward sub-10" plan
+_Replaced by the super-solution reproduction above — it subsumes "re-tune CatBoost/LGB + add XGB" (the
+super-solution drops XGB and retunes LGB/CB) and adds the new feature families. Kept for provenance.
+Open idea still worth trying inside the new build: average several seeded PF realizations per row
+(ensemble out PF noise) for a more robust feature than one seed._
+
+## 🅿️ BACKLOG — try ONLY if the super-solution reproduction stalls (the 10→7 gap)
+_Source: forum post "Dynamic Programming for TVT Tracking: What Worked, What Didn't, and What the Gap
+Tells Us" (2026-06-01). Read it in full before acting — key claims below._
+- **The post is a 14→10 analysis, not a 10→7 one.** Its main lever (spatial structural backbone =
+  FormationPlaneKNN on top of GR matching) is **already in our build** — that's why we're at 10, not 14.
+  It treats ~9 as the ceiling; the board is at 6.7, so it does NOT explain the leaders. Public sources
+  remain stale at the top. See memory [[lb-board-moved-sub7]].
+- **⚠️ Warning it raises about the super-solution plan:** point-by-point GR matching may be at the NOISE
+  FLOOR. Evidence: their Viterbi/DP features ranked #1 by gain, OOF +0.46 ft, **LB +0.001 ft**, fold
+  variance 0.44→0.87 (textbook CV-overfit). sleep3r's shuffled-GR experiment scored marginally HIGHER
+  than real GR. If true, the super-solution's NEW features (4th tw_diff family, multi-scale NCC, GR
+  envelope/energy/detrend) are more GR-matching → possible OOF candy that won't move LB.
+- **CHEAP TEST to run alongside the super-solution build (do this, it's ~free):** ablate full
+  frontier-222 vs 222-minus-GR-matchers (drop PF/beam/NCC/DTW/tw_diff, keep spatial backbone +
+  trajectory + GR-rolling). Compare **fold variance + BLOCK-HOLDOUT OOF** (not single-well LOO — see
+  memory [[gate-spatial-levers-with-block-holdout]]). Tells us whether our 10.122 is the spatial backbone
+  carrying overfit GR features. Our notes claim "PF dominant, dropping it cost +0.95 OOF" but that was
+  never LB- or block-verified — this post says that exact kind of OOF gain is a mirage.
+- **🎯 The actual fallback lever (if GR matching is confirmed tapped out): azimuthal-resistivity / ANCC
+  as an OBSERVATION signal, not just a spatial-imputation target.** This competition IS ROGII's azimuthal
+  resistivity inversion problem (their own blog). We use ANCC only inside DenseANCCImputer (spatial
+  target); we have NEVER used it as a per-position log-matching signal the way GR is used, nor attempted a
+  real resistivity inversion. It's the one physically-motivated channel no public notebook touches → best
+  candidate for the 10→7 gap. Scope a resistivity-matched tracker / inversion feature family if the
+  GR-only ceiling (~9) is confirmed.
+
+## ⚠️ How to resume the frontier work (cold start)
+- **Banked: LB 10.122.** Live: kernel `stevewatson999/rogii-frontier-inference` v1, dataset
+  `stevewatson999/rogii-frontier-artifacts`, 30 seeded models in `models/frontier/`, blend
+  `models/frontier/blend_frontier.json` (raw NNLS coef), seeded feats `data/processed/frontier_seeded/`.
+- **The reproduce→submit pipeline (all validated):** seeded build `experiments/frontier_build_mp.py`
+  → train `frontier_train_lgb.py` (skynet GPU) + `frontier_train_cat.py` (deepthought GPU, FR=seeded)
+  → `frontier_blend.py`/inline re-blend → `make_frontier_kernel.py` (regenerates kernel w/ seeding)
+  → validate locally (KAGGLE_INPUT=/tmp/kval_input) → `kaggle datasets version` + `kaggle kernels push`.
+- **NEVER drop the crc32-per-well numba seeding** — non-seeded PF/DTW broke train↔inference by 1.24 ft.
+- Source recipe: `/tmp/nihilisticneuralnet_9-251-...code.py` (cached; re-pull if /tmp cleared).
+
+## ▶️ ACTIVE WORK — frontier (9.251) reproduction + HPO
+**Why this, not more ablation:** the ablation treadmill produced a string of nulls (NCC, postproc,
+PF/beam/DTW point-estimators, GP, extractor-in-stack). The ONE big jump (12.6→11.9) came from
+reproducing a better notebook wholesale (konbu). The bet: PF/DTW/NCC were each found null as SOLO
+gates, but solo gates mislead both ways (extractor +0.065 solo/null in-stack; GP +0.23 in-stack/dead
+LB) — the +1.8 ft to OOF~10 may live in the tuned simultaneous UNION of ~150 feats, never built.
+Ruled out cheaply: **images are dead** (test/ ships 0 PNGs → train-only, absent at inference; also
+just a rendering of tabular data).
+
+**Target recipe** (`/tmp/rogii_research/nihilisticneuralnet_9-251-.../*.ipynb`,
+`/tmp/nihilisticneuralnet_9-251-...code.py`): ~150-feat build = konbu base + **PF(ANCC,600p),
+PF(Z), multi-scale DTW (radii 20/50/100/200) + stochastic DTW, 7 beam configs, multi-scale NCC**
+→ **LGB×3 + CatBoost×3** → hill-climb blend → **Optuna(500-trial) shrinkage α / PS-fade τ / PF-blend
+w_pf + Savitzky-Golay**. Published OOF ~10.0 / LB 9.251.
+
+**Phase A (RUNNING): feature build.** `experiments/frontier_repro_build.py` sources their notebook
+code verbatim (only patched: data path → our `data/raw`, NCPU 4→16, dropped modeling/plot imports),
+builds + caches the union → `data/processed/frontier/{train,test}_feats.parquet`. Log
+`log/frontier_build_*.log`. **Long pole — PF×2 + DTW×4 + stochastic-DTW + 7 beams over 773 wells is
+heavier than konbu's 1.8 hr build; expect several hours.** `optuna` pip-installed into kaggle-arch
+(was missing) for Phase B.
+
+**Phase A (✅ DONE 2026-05-31 22:14):** `data/processed/frontier/{train,test}_feats.parquet` —
+**222-feat union** (konbu 78 + 215 new: 7 beam configs, PF(ANCC/Z), multiscale+stochastic DTW, NCC,
+formation b_well variants), 3.78M train rows, test=14151, 0 NaN/constant, target clean. Threaded
+build self-finished in ~60 min. (Process-parallel `experiments/frontier_build_mp.py` prepped as a
+faster-rebuild tool for Phase-B feature iterations — fork-based ProcessPoolExecutor, inherits FI/DI +
+compiled numba via copy-on-write; not needed for this build.)
+
+**Phase B (▶️ RUNNING — EARLY RESULT IS A BREAKTHROUGH):**
+- `experiments/frontier_train_lgb.py` (skynet GPU): **LGB-222 seed42 OOF = 10.666** vs konbu LGB-78
+  ~12.07 (**−1.40 ft from features alone**); a SINGLE LGB already beats the banked 5-model stack
+  (11.821) by 1.15. Per-fold 9.90–11.60. Seeds 7/123 training. OOF/test → `models/frontier/`.
+- `experiments/frontier_train_cat.py` (deepthought GPU): CatBoost×3 on the union with tuned params,
+  seed42 folds tracking 9.6–11.7. OOF/test → `models/frontier/` (rsync back to skynet after).
+- **The bet is confirmed:** PF/DTW/NCC carry JOINT signal the solo/additive tests missed (false
+  negatives, exactly the forward-test failure mode). Tracking the 9.251's published OOF~10/LB 9.251.
+- **✅ GATE CLEARED — combined OOF 10.41 (raw 6-model NNLS blend, `experiments/frontier_blend.py`),
+  −1.41 ft vs banked 11.821.** Per-model: LGB 10.67/10.76/10.69, CatBoost 10.54/10.51/10.60. Postproc
+  adds only −0.02 (weak on our base, as the nested probe found) → don't rely on it; raw blend is the
+  number. Weights: cat_7 0.36/cat_42 0.24/lgb_42 0.22/lgb_123 0.16, others ~0. Tracks the 9.251's
+  published OOF ~10.0. Artifacts: `models/frontier/` (oof_/test_ npy per seed, blend_summary.json,
+  test_blend_drift.npy).
+- **✅ LEAK CHECK PASSED:** read `build_well` line-by-line — eval-row feats use only GR/X/Y/Z/MD (all
+  observed at test), TVT_input (known prefix only), and self-excluded spatial imputation; `ev['TVT']`
+  used ONLY as the target. Future-GR (center/lead) is legit (full GR trace given at inference). OOF is
+  GKF-by-well. The 1.4 ft jump is real joint signal, not leakage.
+- **BIG LESSON (save to memory):** every solo/additive test had written off PF/DTW/NCC as dead — false
+  negatives. Reproducing the full notebook WHOLESALE (not add-one-at-a-time) unlocked −1.4 ft. Biggest
+  lever of the project, bigger than konbu. The forward-test methodology was the trap.
+
+### ▶️ READY TO SUBMIT (web-only step remains) — frontier kernel pushed, ran COMPLETE, validated
+- **Determinism bug found + fixed:** 25/222 feats (PF + stochastic-DTW) were non-deterministic
+  (np.random inside @njit, numba RNG unseeded) → first kernel mismatched trained feats by mean 1.24 ft.
+  Dropping them cost +0.95 OOF (PF is the dominant signal) so instead **seeded numba RNG per-well**
+  (crc32(wid)); verified reproducible (max|Δ|=0). Rebuilt seeded feats (`data/processed/frontier_seeded/`),
+  retrained all 6 (`models/frontier/`, 30 models), re-blended → **seeded OOF 10.356** (raw coef in
+  `models/frontier/blend_frontier.json`).
+- **Kernel `jupyter_frontier/rogii_frontier_inference.py`** (generated by `experiments/make_frontier_kernel.py`,
+  embeds the seeded 9.251 build): locally reproduces the pipeline mean|Δ|=0.0; on Kaggle reproduces to
+  mean|Δ|=0.00004 ft (max 0.044). Ran COMPLETE (~78s), 14151 rows, ids match, 0 NaN.
+- **Live artifacts:** dataset `stevewatson999/rogii-frontier-artifacts` (ready), kernel
+  `stevewatson999/rogii-frontier-inference` v1.
+- ✅ **SUBMITTED & SCORED 2026-06-01: LB 10.122** (OOF 10.356 → LB−OOF = **−0.234, FAVORABLE**;
+  board beats CV → clean transfer, PF signal held). **NEW BEST, −1.78 ft vs 11.903.** Frontier ≈7.5 →
+  ~2.6 ft back. Biggest jump of the project.
+
+### ⬜ (SUPERSEDED by "▶️ NEXT — super-solution" at top) squeeze toward sub-10
+_The super-solution reproduction at the top subsumes this. Kept for the specific tuning notes below._
+The frontier recipe transferred cleanly, so the path is now: push the same recipe further.
+1. **Re-tune CatBoost ON the 222-union** (current params were tuned on the 78-base) + **add XGB×seeds**
+   to the blend — the 9.251 used LGB×3+CatBoost×3; we can add XGB diversity. Expect ~0.2–0.4 OOF.
+2. **Re-tune LGB on the union** (konbu params, never tuned for 222 feats).
+3. Reconsider postproc (was −0.02 here; the 9.251 author got more — may differ with retuned blend).
+4. Each change: gate combined OOF, then re-submit (kernel regen is now a solved, validated path —
+   `experiments/make_frontier_kernel.py` + the seeded build + `frontier_blend` → push → run → submit).
+⚠️ Keep the seeded build (`data/processed/frontier_seeded/`, crc32-per-well) for ALL future frontier
+work — non-seeded PF/DTW breaks train↔inference reproducibility (cost us a 1.24 ft kernel mismatch).
+
+### (DONE) productionize the frontier into the inference kernel + submit
+The OOF 10.41 must be confirmed on the LB. Steps:
+1. **(optional, to push OOF toward ~10.0)** re-tune CatBoost ON the 222-union (current params were tuned
+   on the 78-base) + add XGB×seeds; re-blend. Could shave another ~0.3.
+2. **Productionize:** build a new inference kernel that embeds the FULL 9.251 feature build (PF/DTW/NCC/
+   beams/imputers from `/tmp/nihilisticneuralnet_...code.py`) + loads the `models/frontier/` LGB+CatBoost
+   fold models + applies the NNLS blend (+ optional postproc). Must run ≲20 min on ~200 hidden wells.
+   Package models as a Kaggle dataset; validate kernel reproduces local OOF pipeline; **web-Submit**.
+3. **Record LB vs 11.903.** Transfer expectation: LB ~9.6–10.5 (konbu gap +0.08 → ~10.5; 9.251 author
+   gap → ~9.6). Watch the OOF↔LB gap; these are konbu families (not density-coupled like GP) so lower
+   transfer risk, but the LB is the verdict. If it transfers → NEW BEST, likely sub-10.
+
+**HPO quick win (✅ DONE):** `experiments/hpo_catboost.py` on deepthought GPU, 50 trials Optuna TPE on
+the konbu 78-feat base, same GKF-5 seed42. **CatBoost solo OOF 12.027 → 11.835 (−0.19 ft)**; params →
+`models/konbu/cat_hpo.json` (depth 7-ish, lr~0.024, l2~27). A single tuned CatBoost ≈ the whole banked
+5-model stack (11.821). **NEXT (cheap bankable win, independent of frontier):** retrain CatBoost×folds
+with these params on the konbu base → OOF, re-NNLS with reconstructed banked LGB/XGB OOF → measure stack
+vs 11.821; likely a new konbu-base best to bank even if the frontier bet stalls. (XGB HPO not yet run.)
+
+---
+_⏸️ **2026-05-31 ~1:40 PM — GP regression ROOT-CAUSED: it's a real TRANSFER FAILURE (density-dependent
+imputation collapse OOD), NOT the zero-fill guard the old notes blamed. GP is correctly DEAD. Option 1
+(diagnose the throw to resurrect GP) is now KILLED — negative EV. Banked best stays v2 (LB 11.903).
+Awaiting your call on the fork below.**_
+
+## ✅ THIS SESSION (2026-05-31) — diagnosed WHY GP regressed (the old "zero-fill guard" story was wrong)
+- **Decisive experiment:** `experiments/gp_block_holdout.py` (log `log/gp_block_20260531_131408.log`).
+  Spatial **block-holdout** CV: KMeans the 766 well centroids into 6 blocks, hold out a WHOLE block from
+  the GP reference (simulates a hidden well with NO nearby training neighbor — the real OOD condition),
+  re-impute ANCC, score `tvt_formula` on hidden rows. Compare vs single-well LOO (the gate's condition).
+- **Result — GP's gate number is a density-favorable artifact:**
+  | estimator | single-well LOO | block-holdout | degradation |
+  |---|---|---|---|
+  | **GP** (reproduces gate's 24.50 exactly) | **24.50** | **47.95** | **+23.45 (≈2×)** |
+  GP tail also returns under block-holdout: p99 **87→152**, max **172→325**. (The script's plane-KNN arm
+  is a weak reimpl — LOO 100 vs konbu's real 47.25 — so IGNORE its absolute values; only GP is faithful.)
+- **Why this is the regression mechanism:** a GP **mean-reverts to the global average ANCC far from
+  data**, so the "tail collapse" that won the gate only exists where a well is surrounded by training
+  wells. The models learned to trust `gp_drift` at 24.50-quality (it's the 2× upgrade to the #1 feature);
+  on OOD hidden wells they silently get ~48-quality-with-a-fat-tail and keep trusting it. `gp_std` can't
+  save it — LOO training has almost no "high-std-AND-wrong" examples to learn a down-weight gate from.
+- **The clincher (not even the table):** v2 (no GP) transferred cleanly, OOF↔LB gap **+0.082**. Adding
+  GP — and nothing else — blew the gap to **+1.04**. GP is the ONE feature whose error is coupled to
+  training density → the regression is GP-SPECIFIC transfer failure.
+- **Two corrections to the old record:**
+  1. The "v4 try/except guard zero-filled GP feats on hidden wells" story is **mechanically wrong**.
+     Read `FormationGP.impute` (kernel ~L382): fixed-shape linear algebra — it CANNOT raise on finite
+     coords and yields NaN (not an exception) on bad ones, which `np.nan_to_num` then cleans. The guard
+     almost certainly never fired. (Memory `feedback-dont-harden-around-failures` still stands as a
+     general rule, but the specific "guard caused the regression" claim was unsupported.)
+  2. The "GP throws on a well" story (hypothesis B) is fully dead: `experiments/repro_hidden_throw.py`
+     (log `log/repro_hidden_20260531_130744.log`) ran the kernel's GP path over ALL train wells →
+     **773/773, 0 throws, 0 None, 0 NaN in GP feats.** The v3 "Notebook Threw Exception" was NOT in
+     the GP block.
+- **State: nothing broken / nothing submitted this session.** Banked best v2 (LB 11.903) intact; do NOT
+  select the GP submission for final scoring. Live Kaggle dataset/kernel still sit on broken GP v4
+  (revert pending your call — see fork).
+
+### ⬜ FORK — you said you'll return later; pick one (I recommend #1):
+1. **Revert artifacts + record verdict (recommended).** Re-pin dataset `rogii-konbu-artifacts` to the
+   pre-GP version + re-push the pre-GP kernel so live = banked 11.903; (plan/PICK_UP already updated with
+   the verdict). Then decide a NEW lever separately. _Outward Kaggle push → confirm before I do it._
+2. **Record verdict only, leave Kaggle as-is.** v2's 11.903 submission stands for scoring, so no urgency;
+   revert later. (Docs already updated.)
+3. **Start hunting the next lever now.** Skip cleanup; go straight to scoping a genuinely NEW signal for
+   the 4.4-ft gap (plan §5 konbu-base candidates are thin). I'll propose concrete candidates first.
+
+❌ **NOT an option anymore: diagnosing the GP throw to resurrect GP.** Even a perfectly clean, zero-fallback
+GP still degrades ~2× on OOD hidden wells (block-holdout proves it) — the +0.233 OOF is a mirage that
+won't transfer. Negative EV. Dead.
+
+### (historical, superseded above) — the old "Tomorrow — pick one"
+_The old notes blamed the v4 zero-fill guard and listed "diagnose the GP throw" as option 1. The
+block-holdout experiment above supersedes that: the regression is a transfer failure, not a guard/throw
+bug. Kept for provenance:_
+1. ~~**Diagnose the real GP throw** — if GP runs clean on ALL wells with NO fallbacks, re-evaluate.~~
+   (Killed: clean GP still degrades 2× OOD.)
+2. **Abandon GP, move to a different lever.** (Still valid — now the live path.)
+3. **Leave the dataset/kernel** on GP v4, or revert: re-push `models/konbu/` (pre-GP, in git) as a new
+   dataset version + re-push the pre-GP kernel. NOT urgent (v2 submission stands).
+
+## (historical) ⚠️ the GP throw + hardening details
+- **What happened:** kernel v3 ran COMPLETE interactively (3 public wells) but **threw on the
+  submission rerun** against the hidden ~200-well set. Kaggle does NOT expose the hidden run's log,
+  so the exact traceback is unknown.
+- **Could NOT deterministically reproduce.** Contradiction worth remembering: plane-KNN/RowKNN run
+  BEFORE the GP block and were unchanged from v2 (which scored the hidden set fine at 11.903), so the
+  hidden coords are clean and the throw "should" be in the new GP code — but GP can't throw on finite
+  coords either. 773-train-well GP repro ran clean to 100/773; degenerate tests showed only NaN-X
+  throws (in plane-KNN, pre-existing) and that LGB/XGB/Cat all tolerate NaN.
+- **FIX SHIPPED (v4, per user "harden + re-push"):** in `jupyter_konbu/rogii_konbu_inference.py` —
+  (1) `FormationGP.impute` sanitizes non-finite coords→mu and nan_to_num's mean/std;
+  (2) the per-well GP feature block is wrapped in try/except → on any failure sets the 4 GP feats to
+  0.0 and increments a global `GP_FALLBACKS`, printed after "test shape". So a single bad hidden well
+  can NEVER throw the whole submission. Re-validated locally: **GP fallbacks=0, output identical to v3**
+  (mean 8.6e-5 ft). Kernel v4 pushed RC=0.
+- ▶️ **NEXT:** wait for v4 interactive run COMPLETE (`!cat /tmp/kmonitor4.log`), then **web-Submit v4**.
+  - If it **scores** → done; read `GP fallbacks: N` in the run log: N=0 means GP fully active (expect
+    ~11.59-ish OOF benefit on private); N>0 means the guard fired on N hidden wells (GP partially off
+    there) — still valid, note it.
+  - If it **throws AGAIN** → the bug is NOT in GP (guard would have caught a GP throw). Then suspect:
+    plane-KNN/RowKNN on a hidden edge case, model-predict, or OOM on ~200 wells. Next move: add the
+    same try/except discipline around the plane/row imputers + chunk the test build, OR just revert to
+    v2 (re-pin dataset to prior version + re-push pre-GP kernel = known-good LB 11.903).
+- Debug artifacts: `experiments/repro_hidden_throw.py`, `diag_degenerate.py`; Kaggle logs `/tmp/kout*/`.
+
+## ▶️ (after the throw is resolved) — SUBMIT on the web
+GP/kriging anchor passed the FULL-stack combined gate and is fully productionized. **OOF 11.821 →
+11.589 (+0.233 ft)** — biggest lever since konbu.
+- ✅ **Dataset pushed** (RC=0): `rogii-konbu-artifacts` new version = `models/konbu_gp/` (5-model
+  stack LGB×3+XGB+Cat on 82 feats incl. 4 GP feats + `gp_anchor.json`).
+- ✅ **Kernel `rogii-konbu-inference` v3 pushed (RC=0) and RAN to COMPLETE on Kaggle.** Output
+  `submission.csv` (14,151 rows, ids match sample_submission, tvt 11592–12237) reproduces the local
+  validated prediction to **mean |Δ|=0.007 ft / max 0.05** — the Kaggle env rebuilds imputers+GP from
+  train and loads the GP models correctly.
+- ▶️ **ONLY REMAINING STEP (user, web-only):** open
+  https://www.kaggle.com/code/stevewatson999/rogii-konbu-inference → Output → **Submit to Competition**.
+  Then record the LB in plan.md §1 + LB Submission History and compare to 11.903.
+- ⚠️ Decision after the LB lands: see the trust-CV note below. If public LB is clearly WORSE, revert
+  (re-pin dataset to prior version + re-push pre-GP kernel). Kaggle output cached at `/tmp/kout/`.
+- ⚠️ **CV is over-crediting** (CatBoost was +0.064 CV → +0.018 LB, 28%). +0.233 OOF may land much
+  smaller on the 3-well PUBLIC LB; the win is tail-collapse on isolated wells → expect it to show on
+  the ~200-well PRIVATE LB. Per plan §4 "trust CV", bank it even if public is ~flat. If public LB
+  comes back clearly WORSE, revert: re-pin the dataset to the prior version + re-push the pre-GP kernel.
+
+### What was done this session (GP anchor, 2026-05-30 late PM)
+- **GP feature build** `experiments/gp_feature_build.py` → `data/processed/konbu/gp_feats_{train,test}.parquet`
+  (centroid GP, anisotropic Matern 1.5 + White; LOO for train, full-ref for test). Saved hyperparams
+  `models/konbu_gp/gp_anchor.json` (`experiments/dump_gp_anchor.py`, reproduces build to 5.6e-4 ft).
+- **Combined gate** `experiments/gp_gate.py`: 4 GP feats (gp_drift, gp_std, gp_ancc, gp_vs_fk) added to
+  the cached 78→82 matrix; SOLO LGB 12.090→11.845 (+0.245); FULL stack **11.589** vs banked 11.821.
+  Models → `models/konbu_gp/`. Leak check clean (gp_tvt_abs vs true TVT RMSE 24.50 = the gate number).
+- **Kernel surgery** `jupyter_konbu/rogii_konbu_inference.py`: added `FormationGP` class + 4 GP feats +
+  `gp_anchor.json` load + ART locator now keys off `gp_anchor.json`. Validated end-to-end
+  (`experiments/validate_gp_kernel.sh` + `finalize_gp_test.py`) to mean 8.6e-5 ft.
+- **BUG found & fixed:** `gp_feature_build.load_traj` gated the PS split on `TVT` (absent on test wells)
+  → test parquet had `b_well=0` (gp_tvt_abs ~344 not ~11800). Fixed to key off `TVT_input`; rebuilt
+  test parquet + corrected `data/processed/konbu_gp/submission_local.csv`. (Train parquet was always
+  correct → trained models unaffected.) The KERNEL computes b_well correctly from TVT_input.
+
+---
+_⏸️ PRIOR (pre-GP): PAUSED 2026-05-30 PM — banked LB 11.903 (konbu + CatBoost)._
 
 ## ▶️ RESUME HERE — productionize the GP anchor (gate PASSED, build NOT started)
 The GP/kriging anchor is the first lever this session that beats what's already in the stack. **Next

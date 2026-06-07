@@ -1,0 +1,306 @@
+"""Generate the Kaggle inference kernel for the frontier (9.251) reproduction.
+
+Kernel = [harness: locate COMP/ART, set env] + [embedded 9.251 feature build, patched] +
+[inference: build test feats, load 30 frontier fold models, NNLS-blend, write submission].
+The 9.251 feature code is embedded verbatim (patched: dataset_path from env, cache=False,
+modeling/plot imports dropped) so the kernel reproduces the exact local feature build.
+"""
+from pathlib import Path
+
+ROOT = Path("/home/swatson/work/kaggle/ROGII")
+SRC = Path("/tmp/nihilisticneuralnet_9-251-rogii-wellbore-geology-prediction-dwt-based.code.py")
+OUTDIR = ROOT / "jupyter_frontier"
+OUTDIR.mkdir(exist_ok=True)
+OUT = OUTDIR / "rogii_frontier_inference.py"
+
+# --- patched 9.251 feature prefix (cells 1-4: njit + imputers + build_well + build_dataset + FI/DI) ---
+prefix = SRC.read_text().split("# ===== CODE CELL 5 =====")[0]
+for bad in ("from hill_climbing import Climber\n", "import matplotlib.pyplot as plt\n",
+            "import seaborn as sns\n", "import optuna\n"):
+    prefix = prefix.replace(bad, "")
+prefix = prefix.replace(
+    'dataset_path = Path("/kaggle/input/competitions/rogii-wellbore-geology-prediction")',
+    'dataset_path = Path(os.environ["ROGII_COMP"])')
+prefix = prefix.replace(
+    'artifacts_path = Path("/kaggle/input/datasets/ravaghi/wellbore-geology-prediction-artifacts")',
+    'artifacts_path = Path("/tmp/_nonexistent_artifacts")')
+prefix = prefix.replace("cache=True", "cache=False")
+# deterministic per-well numba seeding so the kernel's PF/stochastic-DTW reproduce EXACTLY the
+# features the models trained on (verified max|d|=0; without this the kernel mismatched by 1.24 ft)
+prefix = prefix.replace("from numba import njit, prange\n",
+                        "from numba import njit, prange\nimport zlib\n")
+prefix = prefix.replace("def build_well(hw_path, tw_path, is_train):\n",
+                        "@njit(cache=False)\ndef _seed_numba(s):\n    np.random.seed(s)\n\n\n"
+                        "def build_well(hw_path, tw_path, is_train):\n", 1)
+prefix = prefix.replace(
+    "    wid = Path(hw_path).stem.replace('__horizontal_well', '')\n",
+    "    wid = Path(hw_path).stem.replace('__horizontal_well', '')\n"
+    "    _seed_numba(int(zlib.crc32(wid.encode()) & 0x7fffffff))\n", 1)
+
+HEADER = '''"""ROGII frontier inference kernel — 9.251-recipe reproduction (LGB x3 + CatBoost x3 on a
+222-feature union: plane/dense KNN + PF(ANCC/Z) + multiscale & stochastic DTW + 7 beams + NCC).
+Local OOF 10.41 (vs banked 11.82). Rebuilds imputers + features from competition data, loads
+pre-trained frontier fold models, NNLS-blends, writes submission.csv.
+"""
+import os
+import sys
+import json
+from pathlib import Path
+import numpy as np
+import pandas as pd
+
+# ---------------- locate competition data + artifacts (nested CLI mounts) ----------------
+INPUT = Path(os.environ.get("KAGGLE_INPUT", "/kaggle/input"))
+
+
+def _all_dirs(root, maxdepth=5):
+    out = [root]
+    if not root.exists():
+        return out
+    def rec(d, depth):
+        if depth > maxdepth:
+            return
+        try:
+            for x in sorted(d.iterdir()):
+                if x.is_dir():
+                    out.append(x); rec(x, depth + 1)
+        except Exception:
+            pass
+    rec(root, 1)
+    return out
+
+
+cands = _all_dirs(INPUT)
+print("[input] dirs:", [str(p) for p in cands], flush=True)
+COMP = next((p for p in cands if (p / "sample_submission.csv").exists()), None)
+ART = next((p for p in cands if (p / "blend_frontier.json").exists()), None)
+if COMP is None or ART is None:
+    raise FileNotFoundError(f"COMP={COMP} ART={ART}; dirs={[str(p) for p in cands]}")
+print(f"[locate] COMP={COMP}  ART={ART}", flush=True)
+os.environ["ROGII_COMP"] = str(COMP)   # the embedded feature build reads CFG.dataset_path from this
+
+# ======================== EMBEDDED 9.251 FEATURE BUILD (patched verbatim) ========================
+'''
+
+DRIVER = '''
+# ======================== INFERENCE ========================
+import lightgbm as lgb
+from catboost import CatBoostRegressor
+
+# ---- PF-DOMINANT OUTPUT BLEND (2026-06-06) ----------------------------------------------------
+# 128-seed likelihood-weighted multi-scale PF (scale 12). Standalone OOF 10.993; output-blended
+# with the GBM stack (OOF 10.356) at w=0.44 -> OOF 9.17 (gain +1.18 ft, robust out-of-fold).
+# The PF (run_particle_filter + run_pf_lik_ensemble_scales, VERBATIM from ravaghi) is written to a
+# tiny standalone worker module at runtime and run with PROCESS parallelism (loky) -> ~4.35x over
+# threads (the per-eval-row loop is GIL-bound) WITHOUT re-running this kernel's heavy import: loky
+# workers import only pf_worker, never the FI/DI build. Deterministic by construction
+# (np.random.default_rng(seed), seeds 0..127) -> reproduces the measured artifact bit-for-bit
+# (verified max|d|=0 vs the 773-well gate pkl, both backends).
+W_PF = 0.44
+PF_N_SEEDS = 128
+PF_N_PART = 500
+
+import tempfile
+
+_PF_WORKER_SRC = """
+import numpy as np
+import pandas as pd
+from pathlib import Path
+
+SCALES = (3.0, 5.0, 8.0, 12.0)
+BLEND_SCALE = "pf_scale_12"
+N_SEEDS = 128
+N_PART = 500
+
+
+def run_particle_filter(hw, tw, n_particles=500, seed=42):
+    tw_s = tw.sort_values('TVT')
+    tw_tvt = tw_s['TVT'].values.astype(float)
+    tw_gr = tw_s['GR'].fillna(tw_s['GR'].mean()).values.astype(float)
+    kn = hw[hw['TVT_input'].notna()]
+    ev = hw[hw['TVT_input'].isna()]
+    if len(ev) == 0:
+        return hw['TVT_input'].values.astype(float).copy(), 0.0
+    last = kn.iloc[-1]
+    last_tvt = float(last['TVT_input']); last_Z = float(last['Z']); last_MD = float(last['MD'])
+    tw_at_k = np.interp(kn['TVT_input'].values, tw_tvt, tw_gr)
+    gs = float(np.clip(np.nanstd(kn['GR'].fillna(0).values - tw_at_k), 10., 60.))
+    tail = kn.tail(30)
+    dt = np.diff(tail['TVT_input'].values); dz = np.diff(tail['Z'].values); dm = np.diff(tail['MD'].values)
+    m = dm > 0
+    ir = float(np.median((dt + dz)[m] / dm[m])) if m.sum() >= 3 else 0.0
+    N = n_particles
+    rng = np.random.default_rng(seed)
+    ls = last_tvt + last_Z
+    pos = ls + 2.0 * rng.standard_normal(N)
+    rate = ir + 0.01 * rng.standard_normal(N)
+    w = np.ones(N) / N
+    MOM = 0.998; VN = 0.002; PN = 0.005; RP = 0.1; RR = 0.001; RESAMP = 0.5
+    md_v = ev['MD'].values.astype(float); z_v = ev['Z'].values.astype(float)
+    gr_interp = hw['GR'].interpolate(limit_direction='both').fillna(tw_gr.mean())
+    gr_v = gr_interp.values.astype(float)[ev.index]
+    out_vals = hw['TVT_input'].values.astype(float).copy()
+    res = np.empty(len(ev))
+    prev_MD = last_MD; log_lik = 0.0
+    for i in range(len(ev)):
+        dm_step = max(md_v[i] - prev_MD, 1.0)
+        rate = MOM * rate + VN * rng.standard_normal(N)
+        pos = pos + rate * dm_step + PN * rng.standard_normal(N)
+        tvt_p = pos - z_v[i]
+        tvt_p = np.clip(tvt_p, tw_tvt[0] - 100, tw_tvt[-1] + 100)
+        pos = tvt_p + z_v[i]
+        eg = np.interp(tvt_p, tw_tvt, tw_gr)
+        d = (gr_v[i] - eg) / gs
+        lk = np.exp(-0.5 * np.minimum(d**2, 600.))
+        lk = np.maximum(lk, 1e-300)
+        avg_lk = float((w * lk).sum())
+        log_lik += np.log(max(avg_lk, 1e-300))
+        w = w * lk
+        ws = w.sum()
+        w = w / ws if ws > 0 else np.ones(N) / N
+        n_eff = 1.0 / (w**2).sum()
+        if n_eff < RESAMP * N:
+            cum = np.cumsum(w)
+            u0 = rng.uniform(0, 1.0 / N)
+            idx = np.clip(np.searchsorted(cum, u0 + np.arange(N) / N), 0, N - 1)
+            pos = pos[idx] + RP * rng.standard_normal(N)
+            rate = rate[idx] + RR * rng.standard_normal(N)
+            w = np.ones(N) / N
+        res[i] = float(np.dot(w, pos - z_v[i]))
+        prev_MD = md_v[i]
+    out_vals[list(ev.index)] = res
+    return out_vals, log_lik
+
+
+def run_pf_lik_ensemble_scales(hw, tw, scales=SCALES, n_particles=500, n_seeds=128):
+    preds = []; liks = []
+    for s in range(n_seeds):
+        p, ll = run_particle_filter(hw, tw, n_particles=n_particles, seed=s)
+        preds.append(p); liks.append(ll)
+    pred_arr = np.stack(preds, 0)
+    liks = np.array(liks); liks_n = liks - liks.max()
+    out = {}
+    for scale in scales:
+        weights = np.exp(liks_n / float(scale)); weights /= weights.sum()
+        out[f'pf_scale_{scale:g}'] = (weights[:, None] * pred_arr).sum(0)
+    out['pf_mean'] = pred_arr.mean(0)
+    return out
+
+
+def pf_blend_well(hw_path, tw_path):
+    # Per-well 128-seed PF ensemble -> absolute TVT (scale 12) on eval rows. ids match build_well
+    # (f'{wid}_{i}' for i where TVT_input is NaN; CSV RangeIndex == position).
+    try:
+        hw = pd.read_csv(hw_path); tw = pd.read_csv(tw_path)
+    except Exception:
+        return None
+    if 'TVT_input' not in hw.columns:
+        return None
+    ev_mask = hw['TVT_input'].isna().values
+    if ev_mask.sum() == 0 or int(hw['TVT_input'].notna().sum()) < 10:
+        return None
+    wid = Path(hw_path).stem.replace('__horizontal_well', '')
+    try:
+        out = run_pf_lik_ensemble_scales(hw, tw, n_particles=N_PART, n_seeds=N_SEEDS)
+    except Exception:
+        return None
+    pf_tvt = out[BLEND_SCALE][ev_mask].astype(np.float64)
+    ev_idx = np.where(ev_mask)[0]
+    return pd.DataFrame({'id': [f'{wid}_{i}' for i in ev_idx], 'pf_blend_tvt': pf_tvt})
+"""
+
+_pf_dir = tempfile.mkdtemp(prefix="pfworker_")
+with open(Path(_pf_dir) / "pf_worker.py", "w") as _f:
+    _f.write(_PF_WORKER_SRC)
+sys.path.insert(0, _pf_dir)
+import pf_worker  # noqa: E402 (runtime-written; loky workers import THIS, not the kernel)
+print(f"[pf] worker module -> {_pf_dir}/pf_worker.py (loky workers import this only)", flush=True)
+# ----------------------------------------------------------------------------------------------
+
+N_SPLITS = 5
+blend = json.load(open(ART / "blend_frontier.json"))
+keys = blend["keys"]
+coefs = np.asarray(blend["ridge_coef"], dtype=np.float64)
+feature_cols = json.load(open(ART / "feature_cols.json"))
+print(f"[artifacts] {len(feature_cols)} feats; keys={keys} coefs={coefs.round(3)}", flush=True)
+
+test_paths = sorted((Path(os.environ["ROGII_COMP"]) / "test").glob("*__horizontal_well.csv"))
+print(f"[wells] test={len(test_paths)} (imputers FI/DI already built from train/ at import)", flush=True)
+print(">> building test feature union (PF/DTW/NCC/beams)...", flush=True)
+test_df = build_dataset(test_paths, is_train=False, label="test")  # noqa: F821 (from embedded code)
+print(f"   test shape: {test_df.shape}", flush=True)
+
+X = test_df[feature_cols]
+Xv = X.values
+fam_pred = {}
+for k in keys:
+    seed = k.split("_")[1]
+    preds = np.zeros(len(test_df), dtype=np.float64)
+    if k.startswith("lgb_"):
+        for fold in range(N_SPLITS):
+            b = lgb.Booster(model_file=str(ART / f"lgb_seed{seed}_fold{fold}.txt"))
+            preds += b.predict(X) / N_SPLITS
+    elif k.startswith("cat_"):
+        for fold in range(N_SPLITS):
+            b = CatBoostRegressor(); b.load_model(str(ART / f"cat_seed{seed}_fold{fold}.cbm"))
+            preds += b.predict(Xv) / N_SPLITS
+    else:
+        raise ValueError(f"unknown model key {k}")
+    fam_pred[k] = preds
+    print(f"   {k}: mean drift={preds.mean():.3f}", flush=True)
+
+drift = np.zeros(len(test_df), dtype=np.float64)
+for c, k in zip(coefs, keys):
+    drift += c * fam_pred[k]
+tvt_gbm = test_df["last_known_tvt"].to_numpy(np.float64) + drift
+
+# ---- 128-seed PF ensemble per test well, then output-blend (1-W_PF)*GBM + W_PF*PF in abs space ----
+print(f">> PF ensemble ({PF_N_SEEDS} seeds x {PF_N_PART} particles) over {len(test_paths)} wells for output blend ...", flush=True)
+def _twp(p):
+    return str(Path(p).parent / (Path(p).stem.replace("__horizontal_well", "") + "__typewell.csv"))
+pf_args = [(str(p), _twp(p)) for p in test_paths if Path(_twp(p)).exists()]
+pf_res = Parallel(n_jobs=NCPU, verbose=5)(  # default loky backend = true process parallelism
+    delayed(pf_worker.pf_blend_well)(hp, tp) for hp, tp in pf_args)
+pf_parts = [r for r in pf_res if r is not None]
+pf_df = pd.concat(pf_parts, ignore_index=True) if pf_parts else pd.DataFrame(columns=["id", "pf_blend_tvt"])
+print(f"   PF produced {len(pf_df)} eval rows over {len(pf_parts)}/{len(pf_args)} wells", flush=True)
+
+pred_df = pd.DataFrame({"id": test_df["id"].to_numpy(), "tvt_gbm": tvt_gbm})
+pred_df = pred_df.merge(pf_df, on="id", how="left")
+n_pf_miss = int(pred_df["pf_blend_tvt"].isna().sum())
+pred_df["pf_blend_tvt"] = pred_df["pf_blend_tvt"].fillna(pred_df["tvt_gbm"])  # GBM-only fallback
+pred_df["tvt"] = (1.0 - W_PF) * pred_df["tvt_gbm"] + W_PF * pred_df["pf_blend_tvt"]
+print(f">> blend w_pf={W_PF}: GBM mean {pred_df['tvt_gbm'].mean():.2f} | PF mean "
+      f"{pred_df['pf_blend_tvt'].mean():.2f} | blend mean {pred_df['tvt'].mean():.2f} "
+      f"({n_pf_miss} rows GBM-only fallback)", flush=True)
+
+samp = pd.read_csv(Path(os.environ["ROGII_COMP"]) / "sample_submission.csv")
+sub = samp[["id"]].merge(pred_df[["id", "tvt"]], on="id", how="left")
+fallback = float(np.nanmean(pred_df["tvt"].to_numpy()))
+nmiss = int(sub["tvt"].isna().sum())
+sub["tvt"] = sub["tvt"].fillna(fallback)
+out = Path(os.environ.get("KAGGLE_WORKING", "/kaggle/working")) / "submission.csv"
+sub.to_csv(out, index=False)
+print(f">> wrote {len(sub)} rows ({nmiss} filled w/ fallback {fallback:.1f}) -> {out}", flush=True)
+print(sub.head().to_string(), flush=True)
+print(sub.tail().to_string(), flush=True)
+print("=== FRONTIER KERNEL DONE ===", flush=True)
+'''
+
+OUT.write_text(HEADER + prefix + DRIVER)
+n = len((HEADER + prefix + DRIVER).splitlines())
+print(f">> wrote {OUT} ({n} lines)")
+
+# kernel metadata
+import json as _json
+meta = {
+    "id": "stevewatson999/rogii-frontier-inference",
+    "title": "rogii-frontier-inference",
+    "code_file": "rogii_frontier_inference.py",
+    "language": "python", "kernel_type": "script",
+    "is_private": True, "enable_gpu": False, "enable_internet": False,
+    "dataset_sources": ["stevewatson999/rogii-frontier-artifacts"],
+    "competition_sources": ["rogii-wellbore-geology-prediction"],
+}
+_json.dump(meta, open(OUTDIR / "kernel-metadata.json", "w"), indent=2)
+print(f">> wrote {OUTDIR/'kernel-metadata.json'}")

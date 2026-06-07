@@ -45,6 +45,8 @@ from catboost import CatBoostRegressor
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
+from scipy.linalg import cholesky, solve_triangular
+from sklearn.gaussian_process.kernels import Matern, ConstantKernel, WhiteKernel
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GroupKFold
 
@@ -333,9 +335,62 @@ class RowKNN:
                 min_dist.astype(np.float32))
 
 
+# ---------------- centroid GP/kriging ANCC imputer (exp013) ----------------
+
+class FormationGP:
+    """Centroid Gaussian-process imputer for ANCC (anisotropic Matern 1.5 + White).
+
+    Uses SAVED hyperparameters (gp_anchor.json) so the inference posterior matches the
+    training-feature build exactly (validated: max|d ancc| = 5.6e-4 ft on the 3 visible
+    test wells). Reference = the same 766 train centroids (median X/Y over all rows,
+    median ANCC), normalized with the saved mu/sd.
+    """
+
+    def __init__(self, train_paths, anchor):
+        XY, A = [], []
+        for p in train_paths:
+            try:
+                h = pd.read_csv(p, usecols=["X", "Y", "ANCC", "TVT_input"])
+            except Exception:
+                continue
+            if not h["ANCC"].notna().any():
+                continue
+            tvi = h["TVT_input"]
+            if not tvi.isna().any():
+                continue
+            ms = int(np.flatnonzero(tvi.isna().to_numpy())[0])
+            if ms == 0:
+                continue
+            XY.append([float(h["X"].median()), float(h["Y"].median())])
+            A.append(float(h["ANCC"].median()))
+        XY = np.asarray(XY, dtype=np.float64)
+        A = np.asarray(A, dtype=np.float64)
+        self.mu = np.asarray(anchor["mu"], dtype=np.float64)
+        self.sd = np.asarray(anchor["sd"], dtype=np.float64)
+        self.ymean = float(anchor["ymean"])
+        self.const = float(anchor["constant_value"])
+        XYn = (XY - self.mu) / self.sd
+        self.XYn = XYn
+        self.k1 = ConstantKernel(self.const) * Matern(length_scale=anchor["length_scale"], nu=1.5)
+        kf = self.k1 + WhiteKernel(noise_level=anchor["noise_level"])
+        K = kf(XYn)
+        self.L = cholesky(K + 1e-6 * np.eye(len(XYn)), lower=True)
+        self.alpha = solve_triangular(
+            self.L.T, solve_triangular(self.L, A - self.ymean, lower=True), lower=False)
+        self.n_ref = len(XYn)
+
+    def impute(self, xy_q):
+        qn = (np.asarray(xy_q, dtype=np.float64) - self.mu) / self.sd
+        Ks = self.k1(qn, self.XYn)
+        mean = self.ymean + Ks @ self.alpha
+        v = solve_triangular(self.L, Ks.T, lower=True)
+        std = np.sqrt(np.clip(self.const - np.sum(v * v, axis=0), 0.0, None))
+        return mean.astype(np.float32), std.astype(np.float32)
+
+
 # ---------------- per-row feature builder ----------------
 
-def build_hidden_features(h, t, wid, is_train, formation_imputer, row_imputer):
+def build_hidden_features(h, t, wid, is_train, formation_imputer, row_imputer, gp_imputer=None):
     mask = h["TVT_input"].isna().to_numpy()
     if not mask.any():
         return None
@@ -511,13 +566,45 @@ def build_hidden_features(h, t, wid, is_train, formation_imputer, row_imputer):
     feats["knn_row_tvt_pred_delta"] = (tvt_formula_pred_row - np.float32(last_known_tvt)).astype(np.float32)
     feats["fk_vs_row_ANCC_diff"] = (formations_post[:, 0] - row_ancc_post).astype(np.float32)
 
+    # GP/kriging ANCC anchor (exp013): gp_drift, gp_std, gp_ancc, gp_vs_fk
+    # Guarded: any per-well GP failure -> neutral features (0.0) + global counter, so a
+    # single bad hidden well can never throw the whole submission rerun. If GP_FALLBACKS
+    # stays 0 the GP path ran clean for every well.
+    if gp_imputer is not None:
+        n_post = len(hidden)
+        try:
+            gp_ancc_full, gp_std_full = gp_imputer.impute(xy_full)
+            gp_ancc_post = gp_ancc_full[mask_start:]
+            gp_std_post = gp_std_full[mask_start:]
+            if mask_start > 0:
+                b_well_gp = float(np.median(known_tvt + known_z - gp_ancc_full[:mask_start]))
+            else:
+                b_well_gp = 0.0
+            gp_tvt_abs = -z_post + gp_ancc_post + np.float32(b_well_gp)
+            gp_drift = (gp_tvt_abs - np.float32(last_known_tvt)).astype(np.float32)
+            fk_tf = feats["fk_tvt_formula"].to_numpy(np.float32)
+            gp_vs_fk = (gp_drift - fk_tf).astype(np.float32)
+            # final non-finite guard (keep the matrix clean for predict)
+            feats["gp_drift"] = np.nan_to_num(gp_drift, nan=0.0, posinf=0.0, neginf=0.0)
+            feats["gp_std"] = np.nan_to_num(gp_std_post.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+            feats["gp_ancc"] = np.nan_to_num(gp_ancc_post.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+            feats["gp_vs_fk"] = np.nan_to_num(gp_vs_fk, nan=0.0, posinf=0.0, neginf=0.0)
+        except Exception as e:
+            globals()["GP_FALLBACKS"] = globals().get("GP_FALLBACKS", 0) + 1
+            print(f"   [gp-fallback] well {wid}: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            z = np.zeros(n_post, dtype=np.float32)
+            feats["gp_drift"] = z
+            feats["gp_std"] = z
+            feats["gp_ancc"] = z
+            feats["gp_vs_fk"] = z
+
     if is_train:
         feats["target"] = (hidden["TVT"].to_numpy(dtype=np.float32)
                            - np.float32(last_known_tvt)).astype(np.float32)
     return feats
 
 
-def build_dataset(paths, formation_imputer, row_imputer, is_train, label):
+def build_dataset(paths, formation_imputer, row_imputer, is_train, label, gp_imputer=None):
     parts = []
     for i, p in enumerate(paths):
         wid = p.stem.replace("__horizontal_well", "")
@@ -527,7 +614,8 @@ def build_dataset(paths, formation_imputer, row_imputer, is_train, label):
             continue
         feats = build_hidden_features(h, t, wid, is_train=is_train,
                                       formation_imputer=formation_imputer,
-                                      row_imputer=row_imputer)
+                                      row_imputer=row_imputer,
+                                      gp_imputer=gp_imputer)
         if feats is not None:
             parts.append(feats)
         if (i + 1) % 100 == 0:
@@ -568,12 +656,21 @@ def _all_dirs(root, maxdepth=5):
 cands = _all_dirs(INPUT)
 print("[input] dirs:", [str(p) for p in cands], flush=True)
 COMP = next((p for p in cands if (p / "sample_submission.csv").exists()), None)
-ART = next((p for p in cands if (p / "blend.json").exists()), None)
+# GP artifacts (exp013) carry gp_anchor.json; fall back to the pre-GP layout (blend.json).
+ART = next((p for p in cands if (p / "gp_anchor.json").exists()), None)
+if ART is None:
+    ART = next((p for p in cands if (p / "blend.json").exists()), None)
 if COMP is None or ART is None:
     raise FileNotFoundError(f"COMP={COMP} ART={ART}; dirs={[str(p) for p in cands]}")
 print(f"[locate] COMP={COMP}  ART={ART}", flush=True)
 
 feature_cols = json.load(open(ART / "feature_cols.json"))
+# GP anchor hyperparameters (exp013); None -> kernel runs the pre-GP feature set.
+gp_anchor = None
+if (ART / "gp_anchor.json").exists():
+    gp_anchor = json.load(open(ART / "gp_anchor.json"))
+    print(f"[gp] anchor loaded: ls={gp_anchor['length_scale']} "
+          f"const={gp_anchor['constant_value']:.3f} noise={gp_anchor['noise_level']:.1e}", flush=True)
 # Prefer the 5-model blend (LGBx3 + XGB + CatBoost, OOF 11.821) when present;
 # fall back to the 4-model blend (OOF 11.885) otherwise.
 blend_path = ART / "blend_catboost.json"
@@ -594,10 +691,15 @@ print(">> rebuild imputers from competition train/", flush=True)
 form = FormationPlaneKNN(train_paths)
 row = RowKNN(train_paths)
 print(f"   plane wells={len(form.df)}  row pts={len(row.ancc):,}  maxself={row.maxself}", flush=True)
+gp = None
+if gp_anchor is not None:
+    gp = FormationGP(train_paths, gp_anchor)
+    print(f"   GP ref centroids={gp.n_ref}", flush=True)
 
 print(">> build test features", flush=True)
-test_df = build_dataset(test_paths, form, row, is_train=False, label="test")
+test_df = build_dataset(test_paths, form, row, is_train=False, label="test", gp_imputer=gp)
 print(f"   test shape: {test_df.shape}", flush=True)
+print(f"   GP fallbacks: {globals().get('GP_FALLBACKS', 0)} well(s)", flush=True)
 X = test_df[feature_cols]
 Xv = X.values
 

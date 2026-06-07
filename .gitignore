@@ -61,4 +61,5 @@ submission.csv
 /data/
 /models/
 /kaggle_artifacts/
+/kaggle_frontier_artifacts/
 catboost_info/
