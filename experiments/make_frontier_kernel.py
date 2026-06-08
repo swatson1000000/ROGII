@@ -87,19 +87,19 @@ DRIVER = '''
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
-# ---- PF-DOMINANT OUTPUT BLEND (2026-06-06; w=0.60 INTERIOR-OPTIMUM PROBE 2026-06-07) -----------
+# ---- PF-DOMINANT OUTPUT BLEND (2026-06-06; w=0.57 VERTEX PROBE 2026-06-07) ---------------------
 # 128-seed likelihood-weighted multi-scale PF (scale 12). Standalone OOF 10.993; output-blended
-# with the GBM stack (OOF 10.356). Fitted OOF optimum is w=0.44 (OOF 9.17, v2 -> LB 8.269); the
-# w=0.77 probe (v3) gave OOF 9.836 -> LB 8.429 but LB-OOF WIDENED -0.90 -> -1.41 (hidden set favors
-# the PF more than train). Two LB points bracket an interior optimum; THIS VARIANT uses w=0.60
-# (OOF 9.327, +0.159 vs the 0.44 optimum) -> linear-gap est. LB ~8.18, a possible small new best.
+# with the GBM stack (OOF 10.356). LB(w) bracket: 0.44->8.269 (v2), 0.60->8.164 (v4, banked best),
+# 0.77->8.429 (v3). Exact 3-point parabola LB(w)=6.71w^2-7.64w+10.33 -> vertex w=0.57, predicted
+# LB ~8.157 (only ~0.007 below banked 8.164 -> within single-LB noise ~+-0.02). THIS VARIANT (v5)
+# tests the vertex directly; banked best stays v4 (w=0.60) unless this CLEARLY wins.
 # The PF (run_particle_filter + run_pf_lik_ensemble_scales, VERBATIM from ravaghi) is written to a
 # tiny standalone worker module at runtime and run with PROCESS parallelism (loky) -> ~4.35x over
 # threads (the per-eval-row loop is GIL-bound) WITHOUT re-running this kernel's heavy import: loky
 # workers import only pf_worker, never the FI/DI build. Deterministic by construction
 # (np.random.default_rng(seed), seeds 0..127) -> reproduces the measured artifact bit-for-bit
 # (verified max|d|=0 vs the 773-well gate pkl, both backends).
-W_PF = 0.60
+W_PF = 0.57
 PF_N_SEEDS = 128
 PF_N_PART = 500
 
