@@ -65,6 +65,29 @@ GPU** (no PCIe scale-up; only LAN between them).
 - **hal9000** is a light third lane (~10× slower than the 4080) — small models, inference
   probes, dev only.
 
+**Cluster (✅ validated 2026-06-10):** the **k0smos stack** (k0s Kubernetes + k0smotron) +
+**NVIDIA GPU Operator v26.3.2** runs across skynet + deepthought for scheduling **independent**
+GPU jobs to whichever GPU is free (not cross-machine training). Both nodes Ready with
+`nvidia.com/gpu: 1` allocatable; CUDA vectoradd validated end-to-end on both via
+`runtimeClassName: nvidia`. Kubeconfig: `~/.kube/config` on skynet; cluster config:
+`~/k0smos/k0sctl.yaml`. Nodes: `spark-4685` (skynet, GB10) and `deepthought` (RTX 4080);
+hal9000 is **not** in the cluster. ⚠️ Setup is non-default: GPU Operator runs with
+`driver.enabled=false` AND `toolkit.enabled=false` (the operator-managed container-toolkit
+v1.19 writes a containerd config shim that breaks k0s's CRI merge → both kubelets NotReady;
+its pod-termination cleanup also deletes/rewrites the config). Instead, nvidia-container-toolkit
+is **host-installed** on both nodes (`/usr/bin/nvidia-container-runtime`), and the containerd
+nvidia runtime is a **hand-managed** partial-CRI drop-in at `/etc/k0s/containerd.d/nvidia.toml`
+(k0s deep-merges it; restart k0s after editing). Don't re-enable `toolkit` in the helm release.
+Submit GPU jobs from `~/k0smos/gpu-job-template.yaml` — it carries **preferred node affinity
+for deepthought** (RTX 4080, ~4–5× faster; validated: lands deepthought when both GPUs idle,
+falls back to skynet when busy). Jobs needing >16 GB GPU memory must instead hard-select the
+GB10 (`nodeSelector: nvidia.com/gpu.product: NVIDIA-GB10`) — VRAM is not schedulable.
+For **training jobs** use `~/k0smos/gpu-conda-job.yaml` (validated on both nodes 2026-06-10):
+hostPath-mounts the node's miniconda3 + this repo (incl. `data/`) + `/usr/local/cuda` into an
+`ubuntu:24.04` pod as uid 1000; the command auto-activates `kaggle-arch` (aarch64) or `kaggle`
+(x86_64) by `uname -m`. ⚠️ Mounts are node-local and the repo copies diverge (deepthought is
+partial/stale) — rsync repo+data to deepthought before unpinned jobs, `syncback` after.
+
 **Multi-GPU:** don't bother with cross-machine DDP. With one GPU per host + only LAN, the
 slowest-GPU bottleneck plus Ethernet AllReduce makes it net-negative vs. single-GPU on
 deepthought. For parallelism, run **independent jobs** per machine (different folds/seeds), not

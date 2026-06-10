@@ -37,6 +37,181 @@ prefix = prefix.replace(
     "    wid = Path(hw_path).stem.replace('__horizontal_well', '')\n"
     "    _seed_numba(int(zlib.crc32(wid.encode()) & 0x7fffffff))\n", 1)
 
+# ---- BET 5: inject UK1 dip-trend-kriging ANCC imputer (uk_centroids.npz from ART) + 3 feats ----
+# Test-only path -> full train-centroid ref (no self-exclusion; mild optimism on the 3 visible wells,
+# same policy as _FI/_DI). uk_predict is BIT-IDENTICAL to experiments/bet5_build_uk_feats.uk_predict
+# (same dual-form UK: M = [[C F],[F^T 0]], RHS = [cov(ref,q); trend(q)^T], pred = lam^T A).
+UK_SETUP = '''
+# ---- BET 5 UK1 dip-trend kriging ANCC imputer (prefactored at import; ref = train centroids) ----
+_ukz = np.load(ART / "uk_centroids.npz")
+_uk_xy = _ukz["xy"].astype(np.float64); _uk_a = _ukz["ancc"].astype(np.float64)
+_uk_mu = _ukz["mu"].astype(np.float64); _uk_sd = _ukz["sd"].astype(np.float64)
+_uk_sill = float(_ukz["sill"]); _uk_nugget = float(_ukz["nugget"]); _uk_ell = float(_ukz["ell"]); _uk_deg = int(_ukz["degree"])
+_uk_XYn = (_uk_xy - _uk_mu) / _uk_sd
+def _uk_trend(XYn, deg):
+    x, y = XYn[:, 0], XYn[:, 1]
+    cols = [np.ones(len(x))]
+    if deg >= 1: cols += [x, y]
+    if deg >= 2: cols += [x * x, x * y, y * y]
+    return np.column_stack(cols)
+_uk_n = len(_uk_XYn); _uk_F = _uk_trend(_uk_XYn, _uk_deg); _uk_p = _uk_F.shape[1]
+_uk_D = np.sqrt(((_uk_XYn[:, None, :] - _uk_XYn[None, :, :]) ** 2).sum(2))
+_uk_C = _uk_sill * np.exp(-_uk_D / _uk_ell); _uk_C[np.diag_indices_from(_uk_C)] += _uk_nugget
+_uk_M = np.zeros((_uk_n + _uk_p, _uk_n + _uk_p))
+_uk_M[:_uk_n, :_uk_n] = _uk_C; _uk_M[:_uk_n, _uk_n:] = _uk_F; _uk_M[_uk_n:, :_uk_n] = _uk_F.T
+def uk_predict(xy_raw):
+    Qn = (np.asarray(xy_raw, np.float64) - _uk_mu) / _uk_sd
+    cq = _uk_sill * np.exp(-np.sqrt(((_uk_XYn[:, None, :] - Qn[None, :, :]) ** 2).sum(2)) / _uk_ell)
+    RHS = np.vstack([cq, _uk_trend(Qn, _uk_deg).T])
+    try:
+        sol = np.linalg.solve(_uk_M, RHS)
+    except np.linalg.LinAlgError:
+        sol = np.linalg.lstsq(_uk_M, RHS, rcond=None)[0]
+    return sol[:_uk_n, :].T @ _uk_a
+print("[uk] dip-trend kriging imputer ready (%d centroids, ell=%.3g)" % (_uk_n, _uk_ell), flush=True)
+'''
+prefix = prefix.replace("_FI = FI; _DI = DI\n", "_FI = FI; _DI = DI\n" + UK_SETUP, 1)
+
+# inject UK feature computation in build_well, right after the dense-ANCC block
+prefix = prefix.replace(
+    "    tvt_dense50 = (-z_ev + d_ancc + b_dl).astype(np.float32)\n",
+    "    tvt_dense50 = (-z_ev + d_ancc + b_dl).astype(np.float32)\n"
+    "    _uk_ev = uk_predict(xy_ev); _uk_kn = uk_predict(xy_kn)\n"
+    "    _b_uk = float(np.median(ktvt + z_kn - _uk_kn))\n"
+    "    tvt_uk = (-z_ev + _uk_ev + _b_uk).astype(np.float32)\n", 1)
+
+# add the 3 UK feats to the feats dict (parallel to the dense path)
+prefix = prefix.replace(
+    "        'tvt_dense50_d': (tvt_dense50 - last_tvt).astype(np.float32),\n",
+    "        'tvt_dense50_d': (tvt_dense50 - last_tvt).astype(np.float32),\n"
+    "        'tvt_uk_d': (tvt_uk - last_tvt).astype(np.float32),\n"
+    "        'uk_ancc': _uk_ev.astype(np.float32),\n"
+    "        'uk_vs_dense': (tvt_uk - tvt_dense).astype(np.float32),\n", 1)
+
+# ---- research #2 (dip/curvature) + #4 (CWT detail-band) feature helpers + build_well wiring ----
+# well_dip_feats VERBATIM from experiments/dip_curvature_gate.py; _cwt_detail/detail_ncc VERBATIM
+# from experiments/cwt_texture_gate.py (detail_ncc == that script's multi_scale_ncc, renamed to
+# avoid colliding with the kernel's own multi_scale_ncc which has a different return signature).
+DIP_CWT_HELPERS = '''
+def well_dip_feats(md, x, y, z, tvt_in):
+    """Per-row dip/curvature arrays for one well (full trajectory). Returns dict of len(md) arrays."""
+    n = len(md)
+    kn = np.isfinite(tvt_in)
+    ps = int(kn.sum())  # known prefix is contiguous at the start; PS = first eval row index
+    dmd = np.diff(md)
+    dmd_safe = np.where(dmd > 1e-6, dmd, np.nan)
+    tx, ty, tz = np.diff(x) / dmd_safe, np.diff(y) / dmd_safe, np.diff(z) / dmd_safe
+    tnorm = np.sqrt(tx * tx + ty * ty + tz * tz)
+    tnorm_safe = np.where(tnorm > 1e-9, tnorm, np.nan)
+    ux, uy, uz = tx / tnorm_safe, ty / tnorm_safe, tz / tnorm_safe
+    dot = (ux[1:] * ux[:-1] + uy[1:] * uy[:-1] + uz[1:] * uz[:-1])
+    ang = np.arccos(np.clip(dot, -1.0, 1.0))
+    dogleg_mid = ang / np.where(dmd_safe[1:] > 1e-6, dmd_safe[1:], np.nan)
+    dogleg = np.zeros(n, np.float64)
+    dogleg[2:] = np.nan_to_num(dogleg_mid, nan=0.0)
+    cum = np.zeros(n, np.float64)
+    if ps < n:
+        cum[ps:] = np.cumsum(dogleg[ps:])
+    grad_md = 0.0; grad_z = 0.0
+    qcoef = None; md_c = 0.0
+    last_tvt = float(tvt_in[kn][-1]) if ps >= 1 else 0.0
+    if ps >= 10:
+        mdk = md[:ps]; zk = z[:ps]; tk = tvt_in[:ps]
+        md_c = float(mdk.mean())
+        try:
+            qcoef = np.polyfit(mdk - md_c, tk, 2)
+            grad_md = float(2.0 * qcoef[0])
+        except Exception:
+            qcoef = None
+        try:
+            zc = float(zk.mean()); qz = np.polyfit(zk - zc, tk, 2)
+            grad_z = float(2.0 * qz[0])
+        except Exception:
+            grad_z = 0.0
+    quad_b_d = np.zeros(n, np.float64)
+    if qcoef is not None:
+        pred = np.polyval(qcoef, md - md_c)
+        quad_b_d = np.clip(pred - last_tvt, -200.0, 200.0)
+    else:
+        quad_b_d[:] = 0.0
+    return {
+        "dogleg": dogleg.astype(np.float32),
+        "cum_dogleg": cum.astype(np.float32),
+        "tvt_dip_grad": np.full(n, np.float32(grad_md)),
+        "tvt_dip_grad_z": np.full(n, np.float32(grad_z)),
+        "quad_b_d": quad_b_d.astype(np.float32),
+    }
+
+
+def _cwt_detail(g, w=31):
+    s = pd.Series(g)
+    s = s.interpolate(limit_direction="both").fillna(float(np.nanmean(g)) if np.isfinite(np.nanmean(g)) else 0.0)
+    trend = s.rolling(w, center=True, min_periods=1).mean()
+    return (s - trend).values.astype(np.float32)
+
+
+def detail_ncc(kgr, ktvt, hgr, hws=(8, 15, 25), stride=3):
+    """VERBATIM cwt_texture_gate.multi_scale_ncc (detail-band align; returns sc_ens, max_score)."""
+    out = []
+    for hw in hws:
+        win = 2 * hw + 1; nk = len(kgr); nh = len(hgr)
+        if nk < win + 1 or nh == 0:
+            out.append((np.full(nh, ktvt[-1], np.float32), np.zeros(nh, np.float32))); continue
+        kg = pd.Series(kgr).rolling(5, center=True, min_periods=1).mean().values.astype(np.float32)
+        hg = pd.Series(hgr).rolling(5, center=True, min_periods=1).mean().values.astype(np.float32)
+        sts = np.arange(0, nk - win + 1, stride, dtype=np.int32); M = len(sts)
+        if M == 0:
+            out.append((np.full(nh, ktvt[-1], np.float32), np.zeros(nh, np.float32))); continue
+        C = kg[sts[:, None] + np.arange(win, dtype=np.int32)[None, :]].astype(np.float32)
+        Cn = (C - C.mean(1, keepdims=True)) / (C.std(1, keepdims=True) + 1e-6)
+        hp = np.pad(hg, hw, mode='edge')
+        H = hp[np.arange(nh)[:, None] + np.arange(win)[None, :]].astype(np.float32)
+        Hn = (H - H.mean(1, keepdims=True)) / (H.std(1, keepdims=True) + 1e-6)
+        ncc = Hn @ Cn.T / win; best = ncc.argmax(1); score = ncc.max(1).astype(np.float32)
+        out.append((ktvt[np.clip(sts[best] + hw, 0, nk - 1)].astype(np.float32), score))
+    tvts = np.stack([o[0] for o in out], 1); scores = np.stack([o[1] for o in out], 1)
+    sw = np.exp(3. * scores); sw /= sw.sum(1, keepdims=True) + 1e-9
+    sc_ens = (tvts * sw).sum(1).astype(np.float32)
+    return sc_ens, np.max(scores, 1).astype(np.float32)
+
+
+'''
+prefix = prefix.replace("def build_well(hw_path, tw_path, is_train):\n",
+                        DIP_CWT_HELPERS + "def build_well(hw_path, tw_path, is_train):\n", 1)
+
+# compute dip + cwt feats in build_well, right after the UK tvt_uk block
+prefix = prefix.replace(
+    "    tvt_uk = (-z_ev + _uk_ev + _b_uk).astype(np.float32)\n",
+    "    tvt_uk = (-z_ev + _uk_ev + _b_uk).astype(np.float32)\n"
+    "    _eidx = ev.index.to_numpy()\n"
+    "    _dip = well_dip_feats(hw['MD'].to_numpy(np.float64), hw['X'].to_numpy(np.float64),\n"
+    "                          hw['Y'].to_numpy(np.float64), hw['Z'].to_numpy(np.float64),\n"
+    "                          hw['TVT_input'].to_numpy(np.float64))\n"
+    "    _kn_mask = hw['TVT_input'].notna().to_numpy()\n"
+    "    if int(_kn_mask.sum()) >= 40:\n"
+    "        _gr_det = _cwt_detail(hw['GR'].to_numpy(np.float64))\n"
+    "        _ktvt_c = hw['TVT_input'].to_numpy(np.float64)[_kn_mask]\n"
+    "        _last_c = float(_ktvt_c[-1])\n"
+    "        _dwt_tvt, _dwt_sc = detail_ncc(_gr_det[_kn_mask], _ktvt_c.astype(np.float32), _gr_det[_eidx])\n"
+    "        _dwt_d = (_dwt_tvt - np.float32(_last_c)).astype(np.float32)\n"
+    "        _det_std = pd.Series(_gr_det).rolling(15, center=True, min_periods=1).std().fillna(0.).values[_eidx].astype(np.float32)\n"
+    "    else:\n"
+    "        _dwt_d = np.zeros(nh, np.float32); _dwt_sc = np.zeros(nh, np.float32); _det_std = np.zeros(nh, np.float32)\n", 1)
+
+# add the 9 dip+cwt feats to the feats dict (right after the UK feats)
+prefix = prefix.replace(
+    "        'uk_vs_dense': (tvt_uk - tvt_dense).astype(np.float32),\n",
+    "        'uk_vs_dense': (tvt_uk - tvt_dense).astype(np.float32),\n"
+    "        'dogleg': _dip['dogleg'][_eidx].astype(np.float32),\n"
+    "        'cum_dogleg': _dip['cum_dogleg'][_eidx].astype(np.float32),\n"
+    "        'tvt_dip_grad': _dip['tvt_dip_grad'][_eidx].astype(np.float32),\n"
+    "        'tvt_dip_grad_z': _dip['tvt_dip_grad_z'][_eidx].astype(np.float32),\n"
+    "        'quad_b_d': _dip['quad_b_d'][_eidx].astype(np.float32),\n"
+    "        'dwt_ncc_d': _dwt_d,\n"
+    "        'dwt_ncc_sc': _dwt_sc,\n"
+    "        'gr_detail_std': _det_std,\n"
+    "        'dwt_vs_sc': (_dwt_d - (sc15 - np.float32(last_tvt))).astype(np.float32),\n", 1)
+
 HEADER = '''"""ROGII frontier inference kernel — 9.251-recipe reproduction (LGB x3 + CatBoost x3 on a
 222-feature union: plane/dense KNN + PF(ANCC/Z) + multiscale & stochastic DTW + 7 beams + NCC).
 Local OOF 10.41 (vs banked 11.82). Rebuilds imputers + features from competition data, loads
@@ -277,6 +452,9 @@ print(f">> blend w_pf={W_PF}: GBM mean {pred_df['tvt_gbm'].mean():.2f} | PF mean
       f"{pred_df['pf_blend_tvt'].mean():.2f} | blend mean {pred_df['tvt'].mean():.2f} "
       f"({n_pf_miss} rows GBM-only fallback)", flush=True)
 
+# BET 5 Stage B = HONEST Final #1: GBM+PF blend (w=0.57) on the +UK225 frontier_uk stack. No leak
+# override (proven a no-op on public; the +UK GBM is the only change vs the banked v5 LB 8.158).
+
 samp = pd.read_csv(Path(os.environ["ROGII_COMP"]) / "sample_submission.csv")
 sub = samp[["id"]].merge(pred_df[["id", "tvt"]], on="id", how="left")
 fallback = float(np.nanmean(pred_df["tvt"].to_numpy()))
@@ -302,7 +480,7 @@ meta = {
     "code_file": "rogii_frontier_inference.py",
     "language": "python", "kernel_type": "script",
     "is_private": True, "enable_gpu": False, "enable_internet": False,
-    "dataset_sources": ["stevewatson999/rogii-frontier-artifacts"],
+    "dataset_sources": ["stevewatson999/rogii-frontier-ens-artifacts"],
     "competition_sources": ["rogii-wellbore-geology-prediction"],
 }
 _json.dump(meta, open(OUTDIR / "kernel-metadata.json", "w"), indent=2)

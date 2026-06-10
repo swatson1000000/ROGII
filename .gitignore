@@ -63,3 +63,6 @@ submission.csv
 /kaggle_artifacts/
 /kaggle_frontier_artifacts/
 catboost_info/
+/kaggle_frontier_uk_artifacts/
+/kaggle_frontier_ens_artifacts/
+/kaggle_frontier_ens_nouk_artifacts/

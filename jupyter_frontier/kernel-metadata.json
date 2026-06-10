@@ -8,7 +8,7 @@
   "enable_gpu": false,
   "enable_internet": false,
   "dataset_sources": [
-    "stevewatson999/rogii-frontier-artifacts"
+    "stevewatson999/rogii-frontier-ens-nouk-artifacts"
   ],
   "competition_sources": [
     "rogii-wellbore-geology-prediction"

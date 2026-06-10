@@ -1,5 +1,243 @@
 # PICK UP HERE
 
+_✅ **2026-06-10 — SCORED: LB 8.131 = NEW BEST (−0.027 vs 8.158, 5.4× the ±0.005 noise band). The pre-registered
+gate's `≤8.152` branch fired: UK specifically was the poison; the no-UK stack OOF gain (−0.0324) transferred ~1:1
+(−0.027) — first favorable GBM-feature-stack transfer. The skeptical 8.17–8.19 pre-read below was WRONG.
+Banked best = 8.131; live kernel v10 IS the banked best (no v5 repush). Final selections: v10 (8.131) + v5 (8.158).
+[[feature-addition-axis-closed]] memory corrected — the axis is reopened for non-UK features, gated as always._
+
+_(Original pre-score status below, kept for the record:)_
+
+_⏳ **2026-06-10 (NO-UK ENSEMBLE BUILT + SHIPPED — SUBMISSION PENDING, PICK UP WHEN IT SCORES). Banked best stays
+LB 8.158 until this scores.** User's call (overrode my bank+harden recommendation, twice): redo the lever-ensemble
+but DROP the UK feature (the dominant contributor that LB-regressed +0.060 solo and was the likely cause of the
+8.171 joint regression). Dropped the 3 UK cols (`tvt_uk_d`, `uk_ancc`, `uk_vs_dense`) from frontier_ens, retrained
+LGB×3 (skynet GPU) + CatBoost×3 (deepthought GPU) on **231 feats** (base-222 + dip-5 + cwt-4); SAME folds/params.
+Scripts: `experiments/ens_nouk_train_lgb.py` / `ens_nouk_train_cat.py` / `ens_nouk_blend.py`; models →
+`models/frontier_ens_nouk/`. **6-model NNLS stack OOF = 10.3232 vs base-222 10.3556 = −0.0324** (vs with-UK ens
+−0.1022, +UK-alone −0.0689 — dropping UK removed ~2/3 of the OOF gain). Cheap gate confirmed dip is dead solo
+(+dip 10.6861 vs base ~10.6501; gate killed early to free the GPU for the real retrain). **Kernel v10 PUSHED + RAN
+on Kaggle** (`rogii-frontier-inference` v10, NEW dataset `rogii-frontier-ens-nouk-artifacts` = 6 nouk models +
+blend + feature_cols[231, no UK] + uk_centroids.npz). Minimal surgery: kernel CODE unchanged (still computes UK
+harmlessly), only `feature_cols.json` excludes UK so the models never see it. Validated locally bit-exact: 231
+feats loaded, 14151 rows, 0 NaN, 0 PF fallback, blend mean 11905.68, w=0.57. **SUBMITTED 2026-06-10 06:00 UTC =
+2:00 AM EDT — status PENDING.** Score poller running in background. Probe:
+`kaggle competitions submissions rogii-wellbore-geology-prediction`._
+
+_**PRE-REGISTERED GATE (apply when it scores, do NOT rationalize after):**_
+_• **≤ 8.152** → no-UK actually transferred; UK specifically was the poison → bank as NEW BEST, reconsider the axis._
+_• **8.153–8.165** (tie, board ±0.005) → no new best, do NOT select it._
+_• **> 8.165** (regress) → FOURTH feature-stack OOF→LB failure (with-UK +0.013, +UK-alone +0.060, super-solution
+  gate-fail, now this) → feature-addition axis stays CLOSED. Bank + harden 8.158._
+
+_**⚠️ SKEPTICAL READ (mine, pre-score):** predicted **8.17–8.19 (wash-to-slight-regress)**. The no-UK stack OOF
+(−0.0324) is the SMALLEST feature-stack gain yet; every prior GBM-feature OOF gain INVERTED on the hidden LB by
++0.08 to +0.13 (with-UK −0.102 stack → +0.013 LB). After PF dilution (~half, GBM is ~56% of the blend) the no-UK
+blended gain is ~−0.015 → no path to a win when −0.102 didn't transfer. dip+cwt are the two solo-dead corr(resid)≈0
+levers; removing UK kept the weakest parts. See [[feature-addition-axis-closed]]. Hope to be wrong._
+
+_⚠️ **LIVE KERNEL is now nouk v10, NOT banked v5.** When this closes, repush v5 content so live == banked (stage
+git 92da23f via temp dir, keep working-tree files) — same cleanup as the BET 5 / ens closes._
+
+_❌ **2026-06-10 (LEVER-ENSEMBLE JOINT TEST CLOSED — SCORED LB 8.171, A REGRESSION). Banked best stays LB 8.158
+(kernel v5, w=0.57, honest). The feature-addition axis is now CLOSED for good — second confirmation GBM-stack OOF
+gains don't transfer on this test.** The joint #1+#2+#4 ensemble (frontier-234, 6 retrained models, PF blend w=0.57)
+scored **8.171 public, +0.013 vs banked 8.158** → the pre-registered gate's `>8.165` branch (REGRESS / 2nd
+confirmation). Outside the ±0.005 board noise (2.6×) and AGAINST the OOF (stack OOF −0.102 / improvement → LB
++0.013 / regression = the gap inverted AGAIN, same direction as BET 5). **This was BET 5 redux exactly as the
+skeptical pre-read called it** (predicted 8.16–8.25 tie-or-regress): the dominant contributor is the same UK feat
+that regressed +0.060 solo, plus two solo-regressing levers; the joint −0.1285 cheap-LGB / −0.102 stack gain is the
+classic OOF-overfit signature (10 of 12 feats corr(resid)≈0) and it did not survive the hidden set. **Decision (NOT
+rationalized to "tie"): this is the third GBM-feature-stack OOF→LB failure** (BET 5 +UK alone +0.060; this joint
++0.013; both against a favorable-looking OOF). **The feature-addition axis closes for good** — adding GBM features
+to the frontier-222 base does not move the hidden LB, regardless of OOF. The PF output-blend (per-well, no training,
+not density-coupled) remains the only thing that ever transferred favorably (−0.90). **Lever-ensemble kernel is NOT
+a final selection. Final selections: v5 (8.158) + {v4 (8.164, stat tie) OR v6 (leak-override, costless-dominant if
+PRIVATE has same-well overlap)}. RECOMMENDATION: BANK + HARDEN 8.158 (Bet 3, final-selection discipline) through
+close 2026-08-05.** ⚠️ **LIVE KERNEL is currently the ens build (8.171), NOT the banked v5** — repush v5 content so
+live == banked (same as the BET 5 close: stage from git 92da23f via a temp dir so the uncommitted ens working-tree
+files stay intact). Nothing running. Probe: `kaggle competitions submissions rogii-wellbore-geology-prediction`._
+
+_⏳ **2026-06-09 PM (LEVER-ENSEMBLE JOINT TEST BUILT + SHIPPED — SUBMISSION PENDING, PICK UP TOMORROW). Banked
+best stays LB 8.158 until this scores.** Reversed the "all dead, bank+harden" call below: instead of testing
+research levers #1/#2/#4 one-at-a-time (each gated dead solo), combined ALL THREE JOINTLY as 12 features on the
+frontier-222 base = 234 feats — the [[reproduce-wholesale-beats-additive-tests]] individually-dead-jointly-alive
+play. **Cheap LGB ablation (`experiments/lever_ensemble_gate.py`, `log/lever_ens_*.log`): base 10.6501 → +UK
+−0.034 / +dip +0.007 / +cwt +0.104 (each ~dead/regressing solo) → +ALL12 JOINTLY = 10.5216 (−0.1285)** = a real
+joint signal where the parts are individually dead. **Full retrain (SAME folds/params): LGB×3 (skynet GPU, seeds
+42/7/123 → 10.5223/10.6209/10.4719, `ens_train_lgb.py`) + CatBoost×3 (`ens_train_cat.py`); 6-model NNLS stack
+OOF = 10.2533 vs banked 10.3556 = −0.102** (`ens_blend.py`, ridge_coef [0.096, 0, 0.286, 0.438, 0.241, 0]).
+PF output-blend w=0.57 (same as v5). **Kernel rebuilt + RAN CLEAN ON KAGGLE** (`rogii-frontier-inference`, dataset
+`rogii-frontier-ens-artifacts` = uk_centroids.npz + 6 ens models + blend + feature_cols): feat port bit-exact
+(`validate_ens_kernel_feats.py`, max|Δ|=0 on 8 ported feats), Kaggle run COMPLETE clean (14151 rows, 0 fallback,
+blend mean 11905.79). **SUBMITTED 2026-06-10 01:18 UTC = 2026-06-09 9:18 PM EDT — status PENDING; scores ~10:30–11:20
+PM EDT.** Probe: `kaggle competitions submissions rogii-wellbore-geology-prediction`._
+
+_**PRE-REGISTERED GATE (apply tomorrow when it scores, do NOT rationalize after):**_
+_• **≤ 8.152** → real joint win UK-alone wasn't; bank as NEW BEST, feature-ensemble axis reopens._
+_• **8.153–8.165** (tie, board is ±0.005) → OOF gain washed out; NO new best, do NOT select it._
+_• **> 8.165** (regress) → SECOND confirmation GBM-feature-stack OOF gains don't transfer on this test → feature-addition
+  axis closes for good; bank + harden 8.158 stands._
+
+_**⚠️ SKEPTICAL READ (mine, pre-score):** this is BET 5 redux. BET 5 shipped the SINGLE STRONGEST of these three
+levers (UK) alone — stack OOF −0.069 / PF-blended −0.024 → LB +0.060 REGRESSION (12× noise, gap inverted). This
+ensemble is that SAME UK feature (still the dominant contributor) + two levers that individually make OOF WORSE;
+the joint −0.1285 comes from 12 feats, 10 with corr(residual)≈0 = classic OOF-overfit signature. PF blend dilutes
+the GBM-half gain same as BET 5 (−0.102 stack likely → ~−0.03 blended; BET 5's −0.024 blended → +0.060 LB). The
+precedent it leans on (PF/DTW/NCC dead-solo → +1.4 JOINTLY → transferred) had NULL solo + a +1.4 ft gain; these
+REGRESS solo with a ~−0.1 gain inside the magnitude that already failed once. **Predicted 8.16–8.25 (tie-or-regress).**
+Hope to be wrong. Decide BEFORE the score: a tie = "third dead confirmation," NOT "neutral, keep combining."_
+
+_🏁 **2026-06-09 (RESEARCH DOC FULLY EXHAUSTED — #4 CWT/DBA TEXTURE GATED DEAD, WORST OF ALL). Banked best
+stays LB 8.158. ALL 5 levers of `research_geosteering_6ft.md` are now closed. No untested honest axis remains.**
+#4 (`experiments/cwt_texture_gate.py`): 4 detail-band GR-texture feats (high-pass + verbatim multi_scale_ncc
+self-align). Cheap single-LGB: base-222 10.6363 → +4 cwt 10.7637 = **+0.127 REGRESSION** (worst of the four);
+all 4 feats corr(residual)≈0 — detrending destroys the level raw NCC uses → noisy aliased estimate the tree
+overfits. Confirms doc "≤0.1 ft / redundant" + [[blend-averaging-axis-spent]]. **Final doc scoreboard: #1 kriging
+LB-regressed 8.218 · #2 dip OOF-regressed +0.043 · #3 RGT ill-posed (single-layer) · #4 texture OOF-regressed
++0.127 · #5 leak dead on public.** The structural-prior thread reduces (for single-layer laterals) to the ANCC
+dip surface (=BET 5, regressed) + GR-texture re-params (=#2/#4, regressed/noise). **8.158 is the honest public
+ceiling from GR+trajectory+train-surfaces. A new lever now requires a NEW SOURCE (private winner writeup
+post-deadline / forum disclosure / ROGII blog), not this doc. RECOMMENDATION: BANK + HARDEN — Bet 3 final-selection
+discipline through close 2026-08-05. Final selections: v5 (8.158) + {v4 8.164 OR v6 leak-override}.** See
+[[research-geosteering-doc-exhausted]]. Nothing running._
+
+_❌ **2026-06-09 (LATER — RESEARCH #3 RGT FOUND STRUCTURALLY ILL-POSED; NO SOLVER BUILT). Banked best stays
+LB 8.158.** A 2-min structural diagnostic (`/tmp/rgt_diag.py`, 773 wells) killed RGT before any build:
+**100% of laterals cross 0 formation boundaries (median 0) — every lateral is SINGLE-LAYER**, so its GR has
+no stratigraphic column-sequence to build a relative-geologic-time axis from or to cross-correlate between
+laterals. (The 758 ft lateral TVT span = structural DIP, not column traversal: TVT−ANCC≈b_well; 752/773
+distinct typewells; wells dense, NN-centroid 468 ft.) RGT correlates COLUMN-TRAVERSING logs — the doc §4
+premise conflated the typewell's full column with the lateral's single-horizon trace. Salvage forms all
+collapse: reconcile-typewells → DBA consensus = doc #4 (≤0.1 ft redundant); "structural consistency" for a
+single-layer lateral IS the spatial ANCC/dip surface = BET 5 (built, UK upgrade REGRESSED). For this data
+the doc's §2/§3/§4 structural-prior levers are ONE axis (ANCC dip surface), already tested. **Research #3
+dead (ill-posed). Only #4 (CWT/DBA, ≤0.1 ft redundant) left unbuilt — structural-prior thread exhausted.**
+See [[rgt-lever-ill-posed]]. RECOMMENDATION stands: bank + harden 8.158. Nothing running._
+
+_❌ **2026-06-09 (LATER — RESEARCH #2 DIP/CURVATURE GATED DEAD AT THE CHEAP LGB CHECK). Banked best stays
+LB 8.158.** Built the apparent-dip / 2nd-order-curvature feature family the 222-build lacks (`dogleg`,
+`cum_dogleg` = Q-3D tortuosity, `tvt_dip_grad`/`_z` = prefix dip-gradient, `quad_b_d` = quadratic TVT
+extrapolation; `experiments/dip_curvature_gate.py`, all leak-safe + non-density-coupled). **Cheap single-LGB
+GKF-5: base-222 10.630 → +5 dip 10.673 = +0.043 REGRESSION.** Solo confirm of the only feature with leftover
+signal (`tvt_dip_grad_z`, corr(resid)+0.16): also regresses +0.025 → that corr was cross-well-overfit (per-well
+constant, GroupKFold penalizes it — same as AEON well-feats / self-anchor). The 3 per-row feats are ~null
+(redundant with `dzdmd`/`slp_all`/`slp_b_d`). Killed in ~25 min, NO retrain, NO submission spent. Confirms the
+doc's §6.2 caveat (`b_well` absorbs dip; only dip-CHANGE is marginal, and it's net-negative). **Research #2
+dead.** Only unbuilt research items left: #3 RGT global warp reconciliation (high-effort/speculative) + #4
+CWT/DBA shape feats (≤0.1 ft, likely redundant). See [[dip-curvature-lever-dead]]. RECOMMENDATION stands:
+bank + harden 8.158. Nothing running._
+
+_❌ **2026-06-09 (BET 5 CLOSED — +UK SCORED LB 8.218, A REGRESSION). Banked best stays LB 8.158 (kernel v5,
+w=0.57, honest). The last honest lever on the board is now spent; ALL identified levers are exhausted.**
+The +UK honest kernel (v7, frontier_uk 225 feats incl UK1 dip-trend-kriging ANCC, w=0.57) scored **8.218
+(public), +0.060 vs the banked 8.158** → the pre-registered gate (`>8.158 → revert, close`) fires the KILL
+branch. **This is OUTSIDE noise (LB is ~±0.005; the move is 12× that) and AGAINST the OOF** (stack OOF said
+−0.024 / improvement; LB delivered +0.060 / regression = a +0.084 OOF↔LB gap the wrong way). **Confirms
+[[bet5-uk1-ood-robust-but-test-interpolates]] decisively: the hidden test is INTERPOLATION-regime — UK1≈RowKNN
+there, so UK's block-holdout robustness (36 vs 147 OOD) bought nothing, and its slightly different interpolation
+calibration cost ~0.06 ft. The OOD-tail upside the BET 5 thesis hoped for is ABSENT on the public set.**
+**v7 (8.218) is NOT a final-selection candidate.** Final selections: **v5 (8.158)** + one of {v4 (8.164, stat
+tie), v6 (leak-override, costless-dominant if PRIVATE has same-well overlap)}. **Both halves of the sub-7 gap
+are now closed: ~60% same-well-overlap leak (dead on public — v6 leak-override = 8.158 identical) + ~40%
+structural-dip (BET 5, this result). No known honest public path below ~8. RECOMMENDATION: BANK + HARDEN 8.158
+(Bet 3 — final-selection discipline, protect against a GP-style false positive at competition close 2026-08-05).**
+**Live kernel REPUSHED to v5 content (2026-06-09): kernel version 8 = byte-identical to v5** (w=0.57, honest,
+dataset `rogii-frontier-artifacts`, NO UK / NO leak override), staged from git 92da23f via `/tmp/v5_push/` so the
+uncommitted working-tree v7 (+UK) files were left intact. The live kernel now matches the banked best. v8 auto-runs
+on Kaggle (~1.5-2h) but is NOT submitted — 8.158 is already banked/locked. See plan.md §"BET 5" (now CLOSED)._
+
+_🚀 **2026-06-09 (BET 5 STAGE B SHIPPED — +UK KERNEL v7 PUSHED, RAN CLEAN ON KAGGLE, SUBMISSION PENDING).** ❌ RESOLVED ABOVE (8.218, regression, BET 5 closed).
+Banked best stays **LB 8.158** until this scores. The +UK honest kernel (frontier_uk: 225 feats incl UK1
+dip-trend-kriging ANCC, 6 retrained models, w=0.57, NO leak override) is LIVE as `rogii-frontier-inference`
+v7 on dataset `rogii-frontier-uk-artifacts`. VALIDATED: local run 14151 rows 0 NaN; in-kernel UK feats
+bit-exact vs full-ref standalone (uk_ancc max|Δ|=0, tvt_uk_d max|Δ|=0.0015); Kaggle run reproduces local
+mean|Δ|=2.7e-5 ft (max 0.015), blend mean 11905.68. **Submission PENDING (2026-06-09 04:44 UTC) — scoring on
+hidden set (~1-2h).** Expected: OOF predicts −0.024 vs 8.158 → ~8.13 IF favorable transfer; OOD-tail upside
+possible. **WHEN IT SCORES:** ≤8.158 → +UK is a real honest improvement, bank as new best (kernel v7 = new
+Final #1; keep v5 8.158 + v7 as final selections). >8.158 → UK didn't transfer (the interp-OOF gain didn't
+carry / OOD-tail absent), revert to v5, BET 5 closes. Generator: `experiments/make_frontier_kernel.py` (UK
+injection blocks). Probe: `kaggle competitions submissions rogii-wellbore-geology-prediction`. See
+[[bet5-uk1-ood-robust-but-test-interpolates]]._
+
+_🟢 **2026-06-09 (BET 5 STAGE B BUILD — VALIDATED +0.069 GBM-STACK / +0.024 PF-BLENDED OOF GAIN).** Banked best stays **LB 8.158**. Built UK1 dip-trend-kriging ANCC feats
+(LOO, `experiments/bet5_build_uk_feats.py` → `data/processed/uk_feats.parquet`; kernel artifact
+`models/frontier/uk_centroids.npz`): 3 feats `tvt_uk_d`, `uk_ancc`, `uk_vs_dense` (parallel to the dense
+RowKNN path). Cheap single-LGB check: 10.6409→10.5273 (−0.114, NOT a regression — UK ADDS interpolation
+signal, my "OOF can't see it" prior was WRONG). Full retrain LGB×3 (skynet) + CatBoost×3 (deepthought),
+SAME folds/params, models→`models/frontier_uk/`. **Stack OOF: banked 10.3556 → +UK 10.2864 = −0.069
+(airtight, baseline reproduced exactly).** PF-blended (the LB predictor): banked 9.1732 → +UK 9.1490 =
+**−0.024** at OOF-opt w (dilutes because UK only touches the GBM's ~56% half). **Dilution trajectory:
+single-LGB −0.114 → 6-stack −0.069 → PF-blend −0.024.** Asymmetric bet: validated ~0.024 floor (favorable
+transfer history → LB ~8.13), OOD-tail UPSIDE invisible to interp-OOF (the BET 5 thesis: UK's 36-vs-147
+block-holdout robustness), ~nil downside (UK is the ROBUST spatial member, additive, no-regress confirmed).
+**NEXT (outward, needs go-ahead): kernel surgery** — embed UK kriging at inference (uk_centroids.npz + UK
+predict + 3 feats in build_well), swap to frontier_uk models, validate bit-exact, push, submit ONE. Scripts:
+`bet5_train_lgb.py`/`bet5_train_cat.py`/`bet5_pf_blend.py`. ⚠️ new inference path = determinism-bug category,
+validate locally first. See [[bet5-uk1-ood-robust-but-test-interpolates]]._
+
+_🔬 **2026-06-08 (LATER — BET 5 STAGE A GATED: CLEAN PASS, but DON'T believe the headline).** Banked best stays **LB 8.158**. Dip-trend universal kriging (UK1, degree-1 poly trend + kriged
+residual) of ANCC block-holdout-gated (`experiments/bet5_kriging_block_holdout.py` + `bet5_corrected_gate.py`):_
+
+| estimator | LOO (interp) | BLOCK (OOD) | deg | block p99/max |
+|---|---|---|---|---|
+| RowKNN (production) | 27.26 | 147.15 | +119.9 | 628/1093 |
+| GP (LB-regressed) | 24.50 | 47.95 | +23.5 | 152/325 |
+| **UK1 (dip trend)** | 23.84 | **36.05** | **+12.2** | **129/203** |
+
+_**UK1 is the FIRST spatial estimator with NO density-coupling pathology** — beats RowKNN/GP under
+block-holdout, degrades ½ as much as GP, tames the tail; matches them at interpolation. Mechanism: the
+poly trend EXTRAPOLATES regional dip instead of mean-reverting (GP) / far-IDW-garbage (RowKNN). UK2
+(degree-2) overfits = junk._
+_**⚠️ DO NOT believe the 75% win.** RowKNN at block-147 is the SAME imputer in the LB-8.158 kernel, and the
+frontier GBM-only (rk_tvt_formula = #1 feat) transferred FAVORABLY (10.356→10.122). Impossible if the test
+were block-holdout-OOD → **the hidden test is INTERPOLATION-regime; the 75% is a win in a regime the test
+mostly doesn't occupy.** At interpolation (LOO) UK1≈RowKNN. See [[bet5-uk1-ood-robust-but-test-interpolates]]._
+_**THE FORK (user's call):** (1) **Stage B** = ADD `uk_tvt_formula` + UK-vs-RowKNN disagreement as NEW feats
+(don't replace RowKNN; GBM arbitrates via rk_dist/signal_std), retrain, confirm OOF doesn't REGRESS (it'll
+read ~flat — interpolation OOF can't see the OOD-tail benefit; flat is NOT a kill), then ONE faith-based LB
+submission (EV ≤~0.05 ft, but RMSE is tail-sensitive so an OOD tail could matter). Strictly safe — can't
+regress like GP. (2) **Bank** — favorable transfer says test interpolates, EV small + un-pre-validatable,
+stay at 8.158. Lean (1) only because it's structurally safe, NOT because the 75% is real._
+
+_✅ **2026-06-08 (RESUME — BOTH IN-FLIGHT JOBS RESOLVED). Banked best stays LB 8.158 (kernel v5, w=0.57,
+honest). The PF / published-7.776-method thread is now FULLY EXHAUSTED (averaging + routing + selector +
+spread axes all closed). Nothing running.**_
+
+_**(1) v6 leak-override → LB 8.158** (04:04 UTC row), bit-identical to honest v5. ⟹ **NO same-well overlap
+on the public hidden set; the leak is NOT the public-LB lever.** v6 still weakly dominates v5 (identical
+when no overlap, exact when overlap) → keep v6 as a costless dominant final-selection candidate in case
+PRIVATE contains overlap, but it is not a public win. Leak focus dropped; honest path is the play._
+
+_**(2) sp45 (spread 4.5) PF → NULL lever.** Standalone pf_scale_12 = 11.021 (slightly WORSE than spread-2.0's
+10.993). Two blend tests (`experiments/selector_arm_gate_sp45.py`, `experiments/sp45_straight_blend.py`):_
+_• **Selector method (the published 7.776 mechanism): blend = 9.2642**, IDENTICAL to spread-2.0, worse than
+  the banked straight scale-12 blend 9.1686 → the handoff's explicit gate ("does sp45 make selector⊕GBM beat
+  9.169?") FAILS. sel15 selector+hold+beam is redundant/harmful with our stronger GBM at ANY spread._
+_• **Straight output-blend (production path): sp45 = 9.1625 vs spread-2.0 = 9.1732** → +0.0107 OOF, BELOW the
+  action threshold (we called the 0.006-LB w=0.57/0.60 tie "statistically indistinguishable" on a ±0.005 board;
+  0.011 OOF sits inside that noise band). NOT productionized — a kernel regen + ~2h run + submission slot to
+  chase sub-noise EV. **Published 7.776 method does not transfer; honest path stays 8.158.**_
+
+_**ONLY honest lever left on the board: BET 5 — dip-aware structural kriging of ANCC** (plan §"Research-derived
+bets", `research_geosteering_6ft.md`). It is the ~40% structural-dip half of the sub-7 gap (the other ~60% is
+the same-well overlap leak, confirmed dead on public above). ⚠️ It is the SAME density-coupled spatial family
+that already cost an LB regression (GP: 24.50 LOO → 47.95 block-holdout → LB 12.631) → MUST be gated on
+region/block holdout, not single-well LOO ([[gate-spatial-levers-with-block-holdout]]). Build eyes-open, kill
+fast if block-holdout doesn't hold. The alternative is BANK + HARDEN 8.158._
+
+_**THE BIG REFRAME THIS SESSION:** the public frontier moved to **7.776** (published,
+`lightningv08/lb-7-776-rogii-ridge-sp`, the "ridge-sp/sp45/sel15/spread" family — pulled to
+`/tmp/rogii_0608/`). Decoded: multi-scale PF + sp45 + sel15 selector + hold. **AND the sub-7 / 5.99-leader
+gap is a SAME-WELL TRAIN/TEST OVERLAP LEAK, not a geology method** (pilkwang leakage notebook §0.1 +
+research `research_geosteering_6ft.md`: ~60% leak / ~40% structural-dip). The ONE honest on-data lever
+research found: dip-aware structural kriging for ANCC (SPE-227995, TST vs TSP) — but GP-family, must
+BLOCK-holdout gate ([[gate-spatial-levers-with-block-holdout]]). See [[lb-board-moved-sub7]] (updated)._
+
+_⚠️ Kaggle `kernels status` 500s — use `kaggle kernels output <k> -p <dir>` as the completion probe._
+
+---
+
 _✅ **2026-06-08 — NEW BEST LB 8.158 (w=0.57, curve vertex). PF BLEND WEIGHT FULLY MAPPED & EXHAUSTED.**
 Mapped the PF output-blend weight on 4 LB points — **0.44→8.269, 0.57→8.158 (vertex/best), 0.60→8.164, 0.77→8.429**
 (kernel `rogii-frontier-inference` v2/v5/v4/v3; one scalar `W_PF` in `make_frontier_kernel.py`). The favorable PF
