@@ -1,5 +1,183 @@
 # PICK UP HERE
 
+_✅ **2026-06-12 — CAND B/FWLS SCORED: LB 8.065 = NEW BEST (−0.066 vs 8.131, 13× the ±0.005 noise). The
+pre-registered gate's `≤8.126` BANK branch fired.** Submitted 2026-06-11 10:58 PM EDT, scored overnight.
+Nested OOF −0.0838 → LB −0.066 = **~80% transfer, the first per-well-weighting lever ever LB-tested and
+it WORKED** (vs the 4 feature-stack inversions; output-level family stays the only one that transfers).
+**Banked best = 8.065 (kernel v14 = nouk-231 stack + PF output-blend with FWLS per-well soft weights,
+w_well = clip(0.57 + θ·zscore(9 metas), 0.45, 0.70), θ @ λ=1000 embedded in-kernel). Live kernel v14 IS
+the banked best. Final selections: v14 (8.065) + v10 (8.131).** Axis follow-ups (cheap, offline-gateable,
+NOT yet queued): re-fit θ including the FWLS residual (one more squeeze unlikely to be big), or a
+λ-sweep LB probe (don't — the λ curve was flat 300–3000). **NEXT = the queued fle3n v5 / dual-pipeline
+wholesale reproduction (~7.53 published, still 0.59 below us)** — plan.md §"Next action (2026-06-12)";
+fresh submission slots available. Nothing running._
+
+---
+
+_(Pre-score status below, kept for the record:)_
+
+_🚀 **2026-06-11/12 (LATE NIGHT) — CAND B PRODUCTIONIZED + SHIPPING (user call: "submit CAND B first",
+fle3n-repro deferred to after). Kernel v14 = v10 content + FWLS per-well soft blend weights.** Build:
+`experiments/fwls_fit_production.py` fit θ on all 773 wells @ λ=1000 → `models/frontier_ens_nouk/fwls.json`
+(θ/mu/sd/col_med EMBEDDED in the kernel as literals — dataset unchanged, still
+`rogii-frontier-ens-nouk-artifacts`). Kernel surgery (`make_frontier_kernel.py`, regenerated from restored
+HEAD/883680d state; super working-tree files backed up to `/tmp/super_backup_20260612/` then discarded):
+(1) PF worker also returns per-well `pf_sc_std`/`pf_w_gap` (metas 8/9, computed over FULL arrays incl.
+prefix = exact match to the training-side pkl protocol); (2) blend site computes 9 per-well metas →
+`w_well = clip(0.57 + θ·zscore(m), 0.45, 0.70)`; wells w/o PF keep flat 0.57. **Local end-to-end VALIDATED
+(`log/kval_fwls_*.log`, KAGGLE_INPUT=/tmp/kval_fwls): 14,151 rows, 0 NaN, 0 PF fallback, GBM/PF component
+means match v10 exactly (11905.19/11906.05), w_well = {0.499, 0.516, 0.614} all in band 0 clipped; rank
+order matches train-side expected {0.453, 0.471, 0.605} (+0.01–0.05 self-match optimism on the 3 visible
+wells, expected).** Note metas 1/2 (log n_eval, log md_span) are collinear (1-ft MD steps) — ridge splits
+them evenly, harmless._
+_**PRE-REGISTERED LB GATE (set BEFORE submission, vs banked 8.131, board noise ±0.005 — do NOT
+rationalize after):**_
+_• **≤ 8.126** → real transfer → bank as NEW BEST; per-well-weighting axis validated._
+_• **8.127–8.136** → statistical tie → NOT a new best, do NOT select it._
+_• **> 8.136** → regression → **per-well-weighting axis CLOSED for good** (per-well OOF preferences
+  inverted, the feared failure mode); revert live kernel to v10 content (stage from git 883680d)._
+_**NEXT after this scores (already user-green-lit in principle): the fle3n v5 / dual-pipeline wholesale
+reproduction (~7.53 published)** — see the forum-recheck entry below; sources in `/tmp/rogii_0611/`._
+
+---
+
+_✅ **2026-06-11 (NIGHT) — CAND B (FWLS per-well soft blend weights) GATED PASS: nested OOF −0.0838 vs the
+pre-registered −0.02 bar (`experiments/fwls_gate.py`). Submission spend = USER CALL (pre-committed
+discipline). Banked best stays 8.131.** Centered no-intercept a_w-weighted ridge over 9 per-well metas;
+inner-CV λ ∈ 300–3000; weights 0.45/0.592/0.683 (13% clipped), mean 0.578 = centered held; gain has an
+interior λ-optimum (λ=1000 → −0.0961) and survives λ=30000 (weights ±0.012 → −0.0214). **Decomposition:
+only −0.0222 is the effective-flat-shift component (w_eff=0.556, ≈LB-costless: the measured LB(w) parabola
+puts 0.556 ≈ +0.001 vs the 0.569 vertex); −0.0617 is genuine per-well matching** (rank-corr(a_w,w)=−0.19).
+With-intercept trap reproduced + avoided (mean w 0.52, fake −0.13). ⚠️ Transfer caveat: per-well deviations
+are pure OOF trust and OOF mis-prices PF globally (0.44 vs LB 0.57); clip band bounds the downside; no
+per-well-weighting lever has ever been LB-tested. **Options on the table: (a) spend a submission on FWLS
+(productionize: θ @ λ≈1000 on all wells, ship θ + normalizer, metas all computable at inference), (b) the
+bigger fork below — reproduce fle3n v5 / dual-pipeline (~7.53 published) wholesale, (c) bank+harden.
+Note CAND A gated NULL the same evening (see below); plan.md §candidates has both verdicts.**_
+
+---
+
+_🚨 **2026-06-11 (EVENING) — FORUM/KERNELS RE-CHECK: PUBLISHED FRONTIER MOVED TO ~7.53 + ORGANIZERS RE-ISSUED
+THE HIDDEN LABELS. CAND A GATED NULL. Banked best stays 8.131 (verified reproducible post-patch).**_
+_**(1) Published frontier (sources pulled to `/tmp/rogii_0611/`):** **fle3n v5 (fleongg)** = Engine A
+(lightningv08 ridge-SP, **7.776 LB**) ⊕ Engine B ("Drift-PF" = 128-seed lik-PF + GBM stack + tau=85 drift
+warmup + per-well SG — our architecture + the CAND-A postproc, **7.810 LB**) → 0.55/0.45 blend **7.540**,
++ "interpretation hedge" **7.528 LB**; pretrained models PUBLIC (`fleongg/rogii-claude-models-pub`).
+**pixiux/rogii-dual-pipeline-blend** (165 votes) = blend + guarded same-ID override = best public kernel.
+Engine A ALONE beats our 8.131 by 0.36 ft — and our 06-08 OOF gate that called the sel15/sp45 family
+"redundant" (selector blend 9.2642 vs our 9.1686) is now a suspected OOF FALSE NEGATIVE (the recurring
+inversion shape: OOF said no, LB says yes). **Next big move per the 3-for-3 reproduce-wholesale playbook
+(konbu, frontier, PF-blend): reproduce fle3n v5 / dual-pipeline END-TO-END (user call — it reverses the
+06-08 "published 7.776 method does not transfer" close).**_
+_**(2) LABEL RE-ISSUE (fle3n v5 §5, all LB-measured, ~2026-06-09/10):** same-ID leak DEAD (transfers now
+score worse, 7.611–7.661; duplicate wells' post-PS TVT was independently re-interpreted — "no input-side
+gate can detect label surgery"), and the same pure-blend file moved 7.540→7.586 across the patch. **Our
+verdicts are uncontaminated: v13 (=v10 content) was submitted 2026-06-11 4:18 PM EDT → re-scored 8.131
+EXACTLY** (banked best reproduces post-patch; the 8.220 super-regression verdict stands). ⚠️ The v6
+leak-override final-selection logic is now suspect too — label surgery beats input-side gates; re-decide
+the 2nd final slot when selections are locked._
+_**(3) ❌ CAND A (drift fade-in) GATED NULL** (`experiments/fadein_gate.py`, `log/fadein_gate_*.log`,
+pre-registered bar ≥ −0.02 blended-OOF): baseline 9.2649 (w=0.57, PF rows); FINAL-mode out-of-fold
+**+0.0087 (worse)**; the ravaghi/fle3n point (tau=85, alpha=1.0) ≈ ±0.0004 = nothing — the fade touches
+only **1.7% of our eval rows** (md_since p50 = 2,458 ft). GBM-arm mode's −0.0224 letter-pass DECOMPOSES to
+pure ×1.05 GBM-arm amplification (−0.0218 with NO fade) = an effective re-weight toward GBM (w_pf
+0.570→0.558), the known OOF-pulls-toward-GBM mirage the LB(w) parabola mapped as worse — NOT
+submission-worthy. Per-well Savitzky-Golay also null (−0.0004 @ w17o3). **CAND A closed** (plan.md §
+candidates updated); CAND B (FWLS soft weights) still ⬜ but now second to the reproduce-wholesale fork._
+
+---
+
+_❌ **2026-06-11 (LATER) — FRONTIER_SUPER SCORED: LB 8.220 = REGRESSION (+0.089 vs banked 8.131, ≈18× the
+±0.005 noise). The pre-registered gate's `>8.137` REVERT branch fired. Banked best stays 8.131 (v10); final
+selections v10 (8.131) + v5 (8.158).** Submitted 2026-06-11 12:39 AM EDT, scored same morning. This is the
+**4th GBM-feature-stack OOF→LB inversion and the FIRST with zero UK cols** (stack OOF −0.0892 → LB +0.089;
+the PF-blended OOF −0.0070 called the bear-case direction but not the magnitude) → **the "UK was the poison"
+reading from the 8.131 win is DEAD; the nouk transfer was the exception, not the rule. Feature-addition axis
+CLOSED unconditionally** (correct [[feature-addition-axis-closed]]). The port itself was clean (bit-exact
+max|Δ|=0 on all 28 cols) — the GAIN was the mirage, which means no local gate we own (cheap-LGB, corr(resid),
+stack OOF, even the PROCEED-branch margin) distinguishes transferable feature gains from mirages.
+**✅ REVERT DONE (2026-06-11 ~4:20 PM EDT): kernel v13 pushed = byte-identical v10 content** — staged
+`jupyter_frontier/{rogii_frontier_inference.py,kernel-metadata.json}` straight from git 883680d (HEAD; the
+commit IS the v10 push) via `/tmp/v10_push/`, working-tree super files untouched. Verified before push: 0
+super_worker refs, metadata → `rogii-frontier-ens-nouk-artifacts`, W_PF=0.57, compiles; artifact discovery
+is name-agnostic (globs for `blend_frontier.json`). v13 auto-runs on Kaggle (~1.5–2h) but is NOT submitted
+— 8.131 already banked. **Live kernel == banked best again.** Nothing running._
+
+_🔬 **2026-06-11 (LATER) — DEEP-RESEARCH RUN #2 DONE (98 agents, 25 claims adversarially verified, 20
+confirmed): external blend/weight/postproc levers. Full cited report saved to
+`research_postproc_blend_20260611.json`; candidates + verified negatives written to plan.md §"Output-postproc
+candidates (2026-06-11)" — WORK THE CANDIDATES FROM THERE.** Headline negative: sub-7 leaders disclosed
+NOTHING public (short shelf life — re-check the forum before acting); no published notebook beats ~7.8;
+domain lit (SPE-212544, PluRaListic, arXiv:2402.06377) endorses our exact architecture, no new estimator
+buildable from MD/X/Y/Z/GR/TVT_input. **TWO offline-gateable candidates queued (zero submission cost, both
+in the output-level family that actually transferred):**_
+_• **CAND A — drift fade-in:** `d *= alpha·(1−exp(−md_since/tau))` on the FINAL blended drift (ravaghi
+  tau=85, alpha=1.0; gain unquantified — kernel outputs stripped). **VERIFIED absent from our kernel**
+  (final op = raw blend at `rogii_frontier_inference.py:1319`; savgol imported, never called). Null-risk:
+  the GBM already eats `md_since`/`frac` feats. Gate: (tau×alpha) grid on the banked nouk blended OOF._
+_• **CAND B — per-well SOFT blend weights (FWLS):** tiny ridge over per-well meta-feats (prefix tw-fit RMSE,
+  n_eval, z_span, PF seed spread, rk_dist), fit OOF, EXTREME regularization (LSHTC4 arXiv:1405.0546: +0.5%
+  absolute hidden-test = the winning margin; every richer meta-model failed). **Design constraint: fit
+  deltas CENTERED on the LB-mapped 0.57 vertex, never absolute w** (an unconstrained fit recovers OOF-opt
+  0.44 = known-worse 8.269). ⚠️ Adjacent to the NULLED hard-selector gate (5d4d34e) — if soft+centered+
+  regularized reads null, the whole per-well-weighting axis closes; do not re-slice it._
+_**DISCIPLINE (user pre-committed bank-and-harden twice — honor it): pre-register each gate bar BEFORE
+running (suggested ≥ −0.02 blended-OOF; CAND B also weights ∈ ~[0.45,0.70]); a green gate does NOT
+auto-spend a submission — that is a user call, made before seeing any new OOF number. Verified negatives
+(do not re-derive): learned/ridge meta-blend on the PF weight knob (recovers OOF-opt, known worse); "affine
+recalibration provably MSE-safe" REFUTED 0-3; LB probing for RMSE formally dead (Whitehill is
+log-loss-only and didn't transfer even there)._
+
+---
+
+_(Pre-score status below, kept for the record:)_
+
+_⏳ **2026-06-11 — FRONTIER_SUPER (259-feat union) BUILT + KERNEL v11 PUSHED, KAGGLE RUN IN PROGRESS —
+SUBMISSION PENDING (user web-submit when the run completes). Banked best stays LB 8.131 (v10) until this
+scores.** Session sequence (all gates pre-registered): (1) **Weights-axis scan** (`experiments/weights_axis_scan{,2}.py`,
+offline): PF-blend w re-fit on the nouk stack = NO shift (OOF-opt 0.440 vs 222's 0.443 → kernel w=0.57 vertex
+stands; that plan.md contingency is CLOSED). The find: the **super 6-model stack (the 170-feat sidegrade build,
+OOF 10.371) as a 3rd output-blend member = −0.0399** (3-way nouk⊕PF⊕super 9.1222 vs nouk+PF 9.1621; corr(nouk,
+super)=0.936 vs nouk-g222 0.993 = real diversity; g222 itself adds nothing −0.0011). (2) **super28 cheap-LGB gate
+PASSED** (`experiments/super28_gate.py`): the 28 super-build cols ABSENT from nouk-231 (signal_std/mean, tvtF_*_d
+×6, WLS tvtFw_*_d ×6, pf_ancc_d/pf_z_d, sc*_score ×3, tvt_d50_d, knn_d, gr_detr, pfx_gr_slope, gr_vs_slp/tw,
+beam/form/dense disagreements) joined by id from `data/processed/super/train_feats.parquet`: base231 10.7120 →
++ALL28 **10.5455 = −0.1666** (+new9 alone −0.035). Unlike the with-UK failure (10/12 corr(resid)≈0), these have
+REAL residual correlation (pf_ancc_d −0.18, pf_z_d −0.09, tvtF/tvtFw families −0.04..−0.06). (3) **selfcorr gate
+DEAD** (`experiments/selfcorr_gate.py`, pilkwang prefix-GR self-correlation, the last never-gated "portable
+secondary" family): standalone 212 ft (ALIASED across the prefix TVT range), base231 10.7006 → +5 = −0.0128 <
+the −0.02 bar, all corr(resid)≈0. Closed, not in the build. (4) **Full 6-model retrain on the 259-feat union**
+(`ens_super_build.py` → `data/processed/frontier_super/`; `ens_super_train_{lgb,cat}.py` → `models/frontier_super/`)
+— **first k0smos cluster retrain**: LGB×3 pinned GB10 + CatBoost×3 pinned RTX 4080 via `~/k0smos/rogii-super-{lgb,cat}-job.yaml`,
+ran in parallel (cat 7 min, lgb ~50 min). **Stack OOF = 10.2340 = −0.0892 vs banked 10.3232** (`ens_super_blend.py`,
+gate's PROCEED branch: ≤−0.03). **cat3-only ablation 10.2778 = KEEP the LGB side** (lgb_7 weight 0.242). ⚠️ **PF-blended
+predictor only −0.0070** (9.1551 vs 9.1621) — the 28 cols overlap the output-PF, dilution is severe; the nouk
+precedent (blended −0.011 → LB −0.027, tracked the STACK gain) is the bull case, the sp45 sub-noise precedent the
+bear. (5) **Kernel v11**: the romantamrazov prefix (same patches as super_build.py incl. crc32 per-well np.random
+seeding) embedded as a base64 runtime-written module (`super_worker.py`, pf_worker pattern); fork-pool over test
+wells, keep 28 cols, merge by id. **VALIDATED: max|Δ|=0 on ALL 28 cols × 14,151 rows vs `data/processed/super/test_feats.parquet`**
+(incl. the PF-derived cols → seeding exact); local end-to-end clean (259 feats, 14151 rows, 0 NaN, 0 PF fallback,
+blend mean 11905.71). NEW dataset `rogii-frontier-super-artifacts` (30 models + blend + feature_cols + uk_centroids);
+kernel v11 pushed ~12:25 AM EDT 2026-06-11. **v11 ERRORED on Kaggle**: the top3 prefix probes GPUs via
+`subprocess.run(["nvidia-smi",...])` at import — binary absent in the no-GPU inference image (worked locally,
+skynet has it; super_build.py never hit it). Patched out in the generator, regenerated, 1-well revalidation
+still bit-exact (worst |Δ|=0), **v12 pushed ~12:45 AM EDT; save-run COMPLETE ~1:35 AM EDT, VERIFIED CLEAN: 14,151 rows, 0 NaN,
+blend mean 11905.71, super phase 3/3 wells 0 FAILED, reproduces local to mean|Δ|=8.7e-6 ft (max 0.011 — the
+usual env-float delta). READY TO SUBMIT (user, web): kernel page → Output → Submit to Competition.** Apply the
+pre-registered gate below when it scores; do not rationalize._
+
+_**PRE-REGISTERED LB GATE (user pre-committed 2026-06-11, do NOT rationalize after):**_
+_• **≤ 8.124** → real win, bank as NEW BEST (v11 + v10 final selections)._
+_• **8.125–8.137** (tie band, ±0.005 around 8.131) → **BANK AND HARDEN** — the user pre-committed: a tie means the
+  blended-OOF dilution read was right, the axis is diminishing; final selections v10 (8.131) + v5 (8.158), stop mining._
+_• **> 8.137** (regress) → revert: repush v10 content (nouk dataset + pre-super kernel code; regenerate from git
+  883680d's `make_frontier_kernel.py` — the working tree's generator now carries the super block)._
+
+_⚠️ **LIVE KERNEL = v11 (super), NOT banked v10** until the gate resolves. ⚠️ deepthought now has CUDA LightGBM
+4.6.0 (`device_type="cuda"`, 3.8×, verified) — LGB no longer pins to skynet; memories + CLAUDE.md updated._
+
+---
+
 _✅ **2026-06-10 — SCORED: LB 8.131 = NEW BEST (−0.027 vs 8.158, 5.4× the ±0.005 noise band). The pre-registered
 gate's `≤8.152` branch fired: UK specifically was the poison; the no-UK stack OOF gain (−0.0324) transferred ~1:1
 (−0.027) — first favorable GBM-feature-stack transfer. The skeptical 8.17–8.19 pre-read below was WRONG.

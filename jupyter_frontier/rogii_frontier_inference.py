@@ -1221,7 +1221,13 @@ def pf_blend_well(hw_path, tw_path):
         return None
     pf_tvt = out[BLEND_SCALE][ev_mask].astype(np.float64)
     ev_idx = np.where(ev_mask)[0]
-    return pd.DataFrame({'id': [f'{wid}_{i}' for i in ev_idx], 'pf_blend_tvt': pf_tvt})
+    # FWLS metas 8/9: over the FULL-length arrays (prefix included) — matches the training-side
+    # computation in experiments/fwls_gate.py exactly (pkl arrays were full-length too).
+    _sm = np.vstack([out[f'pf_scale_{s:g}'] for s in SCALES])
+    _sc_std = float(np.mean(np.std(_sm, axis=0)))
+    _w_gap = float(np.mean(np.abs(out[BLEND_SCALE] - out['pf_mean'])))
+    return pd.DataFrame({'id': [f'{wid}_{i}' for i in ev_idx], 'pf_blend_tvt': pf_tvt,
+                         'pf_sc_std': _sc_std, 'pf_w_gap': _w_gap})
 """
 
 _pf_dir = tempfile.mkdtemp(prefix="pfworker_")
@@ -1284,8 +1290,57 @@ pred_df = pd.DataFrame({"id": test_df["id"].to_numpy(), "tvt_gbm": tvt_gbm})
 pred_df = pred_df.merge(pf_df, on="id", how="left")
 n_pf_miss = int(pred_df["pf_blend_tvt"].isna().sum())
 pred_df["pf_blend_tvt"] = pred_df["pf_blend_tvt"].fillna(pred_df["tvt_gbm"])  # GBM-only fallback
-pred_df["tvt"] = (1.0 - W_PF) * pred_df["tvt_gbm"] + W_PF * pred_df["pf_blend_tvt"]
-print(f">> blend w_pf={W_PF}: GBM mean {pred_df['tvt_gbm'].mean():.2f} | PF mean "
+
+# ---- CAND B FWLS per-well soft blend weights (2026-06-11, nested OOF 9.1811 = -0.0838 vs flat
+# 0.57's 9.2649; experiments/fwls_gate.py + fwls_fit_production.py, lambda=1000). w_well =
+# clip(0.57 + theta . zscore(metas), 0.45, 0.70). Metas 1-7 from the built eval-row features,
+# metas 8/9 from the PF worker (full-array scale spread). NaN metas -> training medians.
+# Wells without PF output keep flat W_PF (their rows are GBM-fallback anyway).
+FWLS = {'theta': [0.010162362845929992, 0.010162403145290006, -0.02356415950056395, -0.03341459325360149, 0.007025580189660022, 0.000403787667600295, -0.005724411125148905, -0.05397208563753178, -0.051821227557086], 'mu': [8.457933480154967, 8.457933477720037, 165.3331379366106, 14.208897204479301, 105.44542039713986, 0.03603156335498304, 0.012688105873737584, 0.3603668620651828, 1.4015598162435543], 'sd': [0.28921846619565517, 0.289218458667894, 62.14422003521541, 4.003650521247283, 31.47975281335387, 0.017203018143122122, 0.01285178394440486, 0.7569978886208049, 3.1973521599181542], 'w0': 0.57, 'lo': 0.45, 'hi': 0.7, 'lam': 1000.0, 'meta_names': ['log_n_eval', 'log_md_span', 'z_span', 'pfx_rmse_mean', 'sig_std_mean', 'log1p_knn_dist', 'log1p_dense_dist', 'pf_scale_spread', 'pf_w_vs_mean'], 'col_med': [8.484669999710677, 8.48466968536377, 160.560546875, 13.669037818908691, 105.86336632789035, 0.0334968977386917, 0.008478942956685484, 0.06375982591424637, 0.14375323988114663]}
+_mw = pd.DataFrame({
+    "well": test_df["id"].str.rsplit("_", n=1).str[0],
+    "md_since": test_df["md_since"].astype(np.float64),
+    "z": test_df["z"].astype(np.float64),
+    "pfx_rmse": test_df["pfx_rmse"].astype(np.float64),
+    "sig_std": test_df["sig_std"].astype(np.float64),
+    "spatial_knn_dist": test_df["spatial_knn_dist"].astype(np.float64),
+    "dense_dist": test_df["dense_dist"].astype(np.float64),
+})
+_pfm = pred_df[["id"]].copy()
+_pfm["well"] = _pfm["id"].str.rsplit("_", n=1).str[0]
+_pfm[["pf_sc_std", "pf_w_gap"]] = pred_df[["pf_sc_std", "pf_w_gap"]]
+_pf_well = _pfm.groupby("well")[["pf_sc_std", "pf_w_gap"]].first()
+_rows = []
+for _w, _g in _mw.groupby("well", sort=False):
+    _zc = _g["z"].to_numpy()
+    _rows.append((_w, [
+        np.log(len(_g)),
+        np.log(max(_g["md_since"].max(), 1.0)),
+        float(_zc.max() - _zc.min()),
+        float(np.nanmean(_g["pfx_rmse"].to_numpy())),
+        float(np.nanmean(_g["sig_std"].to_numpy())),
+        float(np.log1p(np.nanmean(_g["spatial_knn_dist"].to_numpy()))),
+        float(np.log1p(np.nanmean(_g["dense_dist"].to_numpy()))),
+        float(_pf_well["pf_sc_std"].get(_w, np.nan)),
+        float(_pf_well["pf_w_gap"].get(_w, np.nan)),
+    ]))
+_meta = np.array([m for _, m in _rows], dtype=np.float64)
+_meta = np.where(np.isfinite(_meta), _meta, np.nan)
+_meta = np.where(np.isnan(_meta), np.asarray(FWLS["col_med"], dtype=np.float64), _meta)
+_theta = np.asarray(FWLS["theta"]); _mu = np.asarray(FWLS["mu"]); _sd = np.asarray(FWLS["sd"])
+_w_well = np.clip(FWLS["w0"] + ((_meta - _mu) / _sd) @ _theta, FWLS["lo"], FWLS["hi"])
+_has_pf = np.array([_w in _pf_well.index and np.isfinite(_pf_well["pf_sc_std"].get(_w, np.nan))
+                    for _w, _ in _rows])
+_w_well = np.where(_has_pf, _w_well, FWLS["w0"])  # no PF -> flat (rows are GBM-fallback anyway)
+_w_map = {w: float(v) for (w, _), v in zip(_rows, _w_well)}
+pred_df["w_pf"] = pred_df["id"].str.rsplit("_", n=1).str[0].map(_w_map).fillna(W_PF)
+print(f">> FWLS w_pf per well: n={len(_w_well)} min/mean/max = {_w_well.min():.3f}/"
+      f"{_w_well.mean():.3f}/{_w_well.max():.3f}  clipped="
+      f"{int(((_w_well <= FWLS['lo'] + 1e-9) | (_w_well >= FWLS['hi'] - 1e-9)).sum())} "
+      f"no_pf={int((~_has_pf).sum())}", flush=True)
+
+pred_df["tvt"] = (1.0 - pred_df["w_pf"]) * pred_df["tvt_gbm"] + pred_df["w_pf"] * pred_df["pf_blend_tvt"]
+print(f">> blend FWLS(w0={W_PF}): GBM mean {pred_df['tvt_gbm'].mean():.2f} | PF mean "
       f"{pred_df['pf_blend_tvt'].mean():.2f} | blend mean {pred_df['tvt'].mean():.2f} "
       f"({n_pf_miss} rows GBM-only fallback)", flush=True)
 

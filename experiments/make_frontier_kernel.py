@@ -384,7 +384,13 @@ def pf_blend_well(hw_path, tw_path):
         return None
     pf_tvt = out[BLEND_SCALE][ev_mask].astype(np.float64)
     ev_idx = np.where(ev_mask)[0]
-    return pd.DataFrame({'id': [f'{wid}_{i}' for i in ev_idx], 'pf_blend_tvt': pf_tvt})
+    # FWLS metas 8/9: over the FULL-length arrays (prefix included) — matches the training-side
+    # computation in experiments/fwls_gate.py exactly (pkl arrays were full-length too).
+    _sm = np.vstack([out[f'pf_scale_{s:g}'] for s in SCALES])
+    _sc_std = float(np.mean(np.std(_sm, axis=0)))
+    _w_gap = float(np.mean(np.abs(out[BLEND_SCALE] - out['pf_mean'])))
+    return pd.DataFrame({'id': [f'{wid}_{i}' for i in ev_idx], 'pf_blend_tvt': pf_tvt,
+                         'pf_sc_std': _sc_std, 'pf_w_gap': _w_gap})
 """
 
 _pf_dir = tempfile.mkdtemp(prefix="pfworker_")
@@ -447,8 +453,57 @@ pred_df = pd.DataFrame({"id": test_df["id"].to_numpy(), "tvt_gbm": tvt_gbm})
 pred_df = pred_df.merge(pf_df, on="id", how="left")
 n_pf_miss = int(pred_df["pf_blend_tvt"].isna().sum())
 pred_df["pf_blend_tvt"] = pred_df["pf_blend_tvt"].fillna(pred_df["tvt_gbm"])  # GBM-only fallback
-pred_df["tvt"] = (1.0 - W_PF) * pred_df["tvt_gbm"] + W_PF * pred_df["pf_blend_tvt"]
-print(f">> blend w_pf={W_PF}: GBM mean {pred_df['tvt_gbm'].mean():.2f} | PF mean "
+
+# ---- CAND B FWLS per-well soft blend weights (2026-06-11, nested OOF 9.1811 = -0.0838 vs flat
+# 0.57's 9.2649; experiments/fwls_gate.py + fwls_fit_production.py, lambda=1000). w_well =
+# clip(0.57 + theta . zscore(metas), 0.45, 0.70). Metas 1-7 from the built eval-row features,
+# metas 8/9 from the PF worker (full-array scale spread). NaN metas -> training medians.
+# Wells without PF output keep flat W_PF (their rows are GBM-fallback anyway).
+FWLS = __FWLS_JSON__
+_mw = pd.DataFrame({
+    "well": test_df["id"].str.rsplit("_", n=1).str[0],
+    "md_since": test_df["md_since"].astype(np.float64),
+    "z": test_df["z"].astype(np.float64),
+    "pfx_rmse": test_df["pfx_rmse"].astype(np.float64),
+    "sig_std": test_df["sig_std"].astype(np.float64),
+    "spatial_knn_dist": test_df["spatial_knn_dist"].astype(np.float64),
+    "dense_dist": test_df["dense_dist"].astype(np.float64),
+})
+_pfm = pred_df[["id"]].copy()
+_pfm["well"] = _pfm["id"].str.rsplit("_", n=1).str[0]
+_pfm[["pf_sc_std", "pf_w_gap"]] = pred_df[["pf_sc_std", "pf_w_gap"]]
+_pf_well = _pfm.groupby("well")[["pf_sc_std", "pf_w_gap"]].first()
+_rows = []
+for _w, _g in _mw.groupby("well", sort=False):
+    _zc = _g["z"].to_numpy()
+    _rows.append((_w, [
+        np.log(len(_g)),
+        np.log(max(_g["md_since"].max(), 1.0)),
+        float(_zc.max() - _zc.min()),
+        float(np.nanmean(_g["pfx_rmse"].to_numpy())),
+        float(np.nanmean(_g["sig_std"].to_numpy())),
+        float(np.log1p(np.nanmean(_g["spatial_knn_dist"].to_numpy()))),
+        float(np.log1p(np.nanmean(_g["dense_dist"].to_numpy()))),
+        float(_pf_well["pf_sc_std"].get(_w, np.nan)),
+        float(_pf_well["pf_w_gap"].get(_w, np.nan)),
+    ]))
+_meta = np.array([m for _, m in _rows], dtype=np.float64)
+_meta = np.where(np.isfinite(_meta), _meta, np.nan)
+_meta = np.where(np.isnan(_meta), np.asarray(FWLS["col_med"], dtype=np.float64), _meta)
+_theta = np.asarray(FWLS["theta"]); _mu = np.asarray(FWLS["mu"]); _sd = np.asarray(FWLS["sd"])
+_w_well = np.clip(FWLS["w0"] + ((_meta - _mu) / _sd) @ _theta, FWLS["lo"], FWLS["hi"])
+_has_pf = np.array([_w in _pf_well.index and np.isfinite(_pf_well["pf_sc_std"].get(_w, np.nan))
+                    for _w, _ in _rows])
+_w_well = np.where(_has_pf, _w_well, FWLS["w0"])  # no PF -> flat (rows are GBM-fallback anyway)
+_w_map = {w: float(v) for (w, _), v in zip(_rows, _w_well)}
+pred_df["w_pf"] = pred_df["id"].str.rsplit("_", n=1).str[0].map(_w_map).fillna(W_PF)
+print(f">> FWLS w_pf per well: n={len(_w_well)} min/mean/max = {_w_well.min():.3f}/"
+      f"{_w_well.mean():.3f}/{_w_well.max():.3f}  clipped="
+      f"{int(((_w_well <= FWLS['lo'] + 1e-9) | (_w_well >= FWLS['hi'] - 1e-9)).sum())} "
+      f"no_pf={int((~_has_pf).sum())}", flush=True)
+
+pred_df["tvt"] = (1.0 - pred_df["w_pf"]) * pred_df["tvt_gbm"] + pred_df["w_pf"] * pred_df["pf_blend_tvt"]
+print(f">> blend FWLS(w0={W_PF}): GBM mean {pred_df['tvt_gbm'].mean():.2f} | PF mean "
       f"{pred_df['pf_blend_tvt'].mean():.2f} | blend mean {pred_df['tvt'].mean():.2f} "
       f"({n_pf_miss} rows GBM-only fallback)", flush=True)
 
@@ -468,6 +523,11 @@ print(sub.tail().to_string(), flush=True)
 print("=== FRONTIER KERNEL DONE ===", flush=True)
 '''
 
+# bake the FWLS production fit (theta/mu/sd/medians) into the kernel as literals
+import json as _j
+_fwls = _j.load(open(ROOT / "models/frontier_ens_nouk/fwls.json"))
+DRIVER = DRIVER.replace("__FWLS_JSON__", repr(_fwls))
+
 OUT.write_text(HEADER + prefix + DRIVER)
 n = len((HEADER + prefix + DRIVER).splitlines())
 print(f">> wrote {OUT} ({n} lines)")
@@ -480,7 +540,7 @@ meta = {
     "code_file": "rogii_frontier_inference.py",
     "language": "python", "kernel_type": "script",
     "is_private": True, "enable_gpu": False, "enable_internet": False,
-    "dataset_sources": ["stevewatson999/rogii-frontier-ens-artifacts"],
+    "dataset_sources": ["stevewatson999/rogii-frontier-ens-nouk-artifacts"],
     "competition_sources": ["rogii-wellbore-geology-prediction"],
 }
 _json.dump(meta, open(OUTDIR / "kernel-metadata.json", "w"), indent=2)

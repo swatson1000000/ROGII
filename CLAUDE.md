@@ -35,6 +35,9 @@ Never propose the next step from memory or inference alone — always verify aga
   CLI (`~/miniconda3/bin/kaggle`) is broken — use the one inside `kaggle-arch`.
 - **deepthought (remote, x86_64)** → `kaggle` — has **detectron2 0.6** (GPU, built from source
   against torch 2.7.1+cu126; verified on the RTX 4080). Not available on skynet/hal9000.
+  Also **CUDA LightGBM 4.6.0** (verified 2026-06-10 on the 4080: `device_type="cuda"` works,
+  3.8× vs CPU, identical RMSE; the OpenCL `device_type="gpu"` is NOT built — use `"cuda"`).
+  GPU LightGBM is therefore available on BOTH skynet (custom sm_121 build) and deepthought.
 
 Always activate before running ANY command — Python scripts, the `kaggle` CLI, etc.:
 
