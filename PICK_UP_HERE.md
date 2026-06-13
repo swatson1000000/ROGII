@@ -1,5 +1,71 @@
 # PICK UP HERE
 
+_🏆 **2026-06-13 — fle3n v5 WHOLESALE REPRODUCTION SCORED: LB 7.582 = NEW BEST (−0.483 vs banked 8.065,
+the biggest jump since the PF output-blend). The pre-registered `≤7.65` BANK branch fired — repro CONFIRMED.**
+Submitted 2026-06-12 9:46 PM EDT (2026-06-13 01:46 UTC), resolved ~3:30 AM EDT (poller caught it, exited
+clean: `log/fle3n_sub_poll_*.log` → `RESOLVED ... 7.582`). **7.582 lands ON the published pure-blend anchor
+(7.586), −0.004 below it** — and the hedge (published 7.528) did NOT show up, exactly as the run log
+predicted (§5 hedge fired only on the 3 visible train-copy wells, near-no-op on the hidden set). So the
+public score reflects the ROBUST pure 0.55·A + 0.45·B blend, NOT the unmeasured-on-private duplicate-label
+hedge — the new best does not depend on the hedge arm. **4th time reproduce-wholesale beat additive testing**
+(konbu → frontier → PF-blend → fle3n v5); reverses the 2026-06-08 "published 7.776 method does not transfer"
+close. **Banked best = 7.582 (kernel `stevewatson999/rogii-fle3n-v5-repro` v1). Final selections updated:
+fle3n-v5-repro (7.582, Final #1) + v14 (8.065, Final #2).** ⚠️ Caveat before building on it: this is a
+black-box reproduction of someone else's dual-engine pipeline (Engine A retrains in-session, Engine B loads
+THEIR pretrained models) — verified clean to run, but WHY it scores 7.58 (which engine carries it) is not yet
+decomposed. **NEXT (pre-registered gated follow-ups, zero new info needed):** (a) measure corr(our
+nouk⊕PF⊕FWLS stack, this blend) on OOF FIRST — only graft our stack in as a decorrelated 3rd member if it's
+genuinely orthogonal; (b) re-fit the A/B blend weight off LB anchors only (pure 7.586, hedge 7.528). Nothing
+running._
+
+---
+
+_✅ **2026-06-12 (EVENING, LATER) — fle3n v5 FORK RUN COMPLETE ON KAGGLE (~15 min — Engine A's boosters
+are ALSO pretrained, loaded from the ravaghi artifacts dataset; only its Ridge stacker retrains, ~7s).
+VERIFIED CLEAN, READY FOR USER WEB-SUBMIT.** Run log (`/tmp/fle3n_repro_output/rogii-fle3n-v5-repro.log`):
+Engine A selector ran all 3 visible wells (PF 128-seed + beam OK), projection applied, sp45 sub 14,151
+rows; Engine B INFERENCE mode from `fleongg/rogii-claude-models-pub`, sub written 14,151 rows in 108s;
+blend report all 5 weights, final = w0.55; §5 hedge FIRED 3/3 visible wells (expected — they ARE train
+copies; the gates decide on the hidden set), blend-vs-recovered mean|d| 0.821 ft. Final `submission.csv`:
+14,151 rows, 0 NaN, 0 non-finite, mean 11903.92. Koolbox pip noise (unsupported-platform wheels) is
+harmless — koolbox itself installed OK. **▶️ SUBMITTED (user, web) 2026-06-12 9:46 PM EDT (2026-06-13 01:46 UTC) — status PENDING, hidden-set
+rerun in progress (Engine A selector PF+beam over ~200 wells; expect hours, their published run survived
+it). Score poller running: `scripts/poll_fle3n_submission.sh` → `log/fle3n_sub_poll_*.log` (10-min
+cadence, exits when the row resolves).** Apply the pre-registered gate below when it scores — do NOT
+rationalize after. Probe: `kaggle competitions submissions rogii-wellbore-geology-prediction`._
+
+---
+
+_🚀 **2026-06-12 (EVENING) — fle3n v5 WHOLESALE FORK PUSHED, KAGGLE RUN IN PROGRESS. Banked best stays
+LB 8.065 (kernel v14) until this scores.** Executed the queued reproduce-wholesale play exactly as planned
+(plan.md §"Next action (2026-06-12)"): pulled `fleongg/fle3n-rogii-v5` with metadata (`/tmp/rogii_0612/
+fle3n_v5_fork/`), pushed **byte-identical notebook** as private kernel `stevewatson999/rogii-fle3n-v5-repro`
+v1 (~9:30 PM EDT) with the same 3 dataset attachments (`phongnguyn23021656/koolbox-offline`,
+`fleongg/rogii-claude-models-pub`, `ravaghi/wellbore-geology-prediction-artifacts`) + competition. Pre-push
+risk scan CLEAN: the `_device()` nvidia-smi probe is inside try/except (the v11/v12 crash mode does NOT
+apply); Engine B auto-detects the pub models → fast INFERENCE mode; the §5 hedge is gated (no-op if no
+duplicate wells at rerun); final `submission.csv` = 0.55·A + 0.45·B then gated hedge w=0.5. Engine A
+RETRAINS its LGB/CatBoost stack in-session (CPU) — expect a multi-hour run. **Background completion poller
+running**: `scripts/poll_fle3n_repro.sh` → `log/fle3n_repro_poll_*.log` (10-min cadence; pulls output to
+`/tmp/fle3n_repro_output/` on COMPLETE). **WHEN COMPLETE: verify the run log (rows / NaN / hedge audit /
+blend report), then USER web-submits** (kernel page → Output → Submit to Competition). ⚠️ The status
+endpoint works again — `kaggle kernels status stevewatson999/rogii-fle3n-v5-repro`._
+_**PRE-REGISTERED LB GATE (set BEFORE submission, vs banked 8.065, board noise ±0.005 — do NOT rationalize
+after). Published post-patch anchors: pure blend 7.586, hedge 7.528 → expected ~7.53–7.59:**_
+_• **≤ 7.65** → repro confirmed → bank as NEW BEST; proceed to the gated follow-ups (plan.md: (a) swap OUR
+  nouk⊕PF⊕FWLS stack in as a decorrelated 3rd member — measure corr on OOF first; (b) A/B weight re-fit
+  off LB anchors only)._
+_• **7.66–8.060** → partial transfer (still a new best if ≤8.060) — bank but DIAGNOSE the gap vs 7.53–7.59
+  (run-log diff vs the published run: hedge fired? blend report? Engine A CV) before building on it._
+_• **> 8.060** → repro FAILED (their published 7.528 did not survive the fork/rerun) — do NOT select;
+  diagnose the run log; the fork itself was byte-identical so suspect env/run nondeterminism or a
+  label-patch interaction._
+_⚠️ Final-selection note (pre-existing, plan.md §next-action risks): the hedge arm exploits re-interpreted
+duplicate labels — its PRIVATE-LB behavior is unmeasured; at selection-lock time the pure blend may be the
+robust pick. Final selections currently: v14 (8.065) + v10 (8.131)._
+
+---
+
 _✅ **2026-06-12 — CAND B/FWLS SCORED: LB 8.065 = NEW BEST (−0.066 vs 8.131, 13× the ±0.005 noise). The
 pre-registered gate's `≤8.126` BANK branch fired.** Submitted 2026-06-11 10:58 PM EDT, scored overnight.
 Nested OOF −0.0838 → LB −0.066 = **~80% transfer, the first per-well-weighting lever ever LB-tested and
